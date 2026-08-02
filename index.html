@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b5d2e">
+<title>Skat – Altenburger Blatt</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">♣ Skat <span class="sub">Altenburger Blatt</span></div>
+    <div id="scoreboard"></div>
+    <button id="menuBtn" class="ghost" title="Menü">☰</button>
+  </header>
+
+  <main id="table">
+    <!-- Gegner oben -->
+    <section class="seat seat-top" id="seat-2">
+      <div class="seat-info"><span class="pname"></span><span class="ptag"></span></div>
+      <div class="hand hand-opp"></div>
+    </section>
+
+    <div class="midrow">
+      <section class="seat seat-left" id="seat-1">
+        <div class="seat-info"><span class="pname"></span><span class="ptag"></span></div>
+        <div class="hand hand-opp"></div>
+      </section>
+
+      <section id="center">
+        <div id="trick"></div>
+        <div id="skatZone" class="hidden"></div>
+        <div id="bubble"></div>
+      </section>
+
+      <section class="seat seat-right seat-skat" id="skatseat">
+        <div class="seat-info"><span class="pname">Skat</span></div>
+        <div id="skatBack" class="hand"></div>
+      </section>
+    </div>
+
+    <!-- Spieler unten -->
+    <section class="seat seat-bottom" id="seat-0">
+      <div class="seat-info"><span class="pname"></span><span class="ptag"></span></div>
+      <div class="hand hand-me" id="myhand"></div>
+    </section>
+  </main>
+
+  <footer id="controls">
+    <div id="prompt"></div>
+    <div id="actions"></div>
+  </footer>
+</div>
+
+<div id="log" class="hidden"><div id="logInner"></div><button id="logClose" class="ghost">Schließen</button></div>
+
+<script src="app.js"></script>
+</body>
+</html>

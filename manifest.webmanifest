@@ -1,0 +1,14 @@
+{
+  "name": "Skat – Altenburger Blatt",
+  "short_name": "Skat",
+  "description": "Skat gegen zwei Computergegner mit deutschem Altenburger Blatt. Reizen, Skat drücken, Farbspiel, Grand und Null.",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b5d2e",
+  "theme_color": "#0b5d2e",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
