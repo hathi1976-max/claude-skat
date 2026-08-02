@@ -58,6 +58,31 @@ function loadSettings() {
 function saveSettings() { try { localStorage.setItem('skat_settings', JSON.stringify(settings)); } catch (e) {} }
 loadSettings();
 
+// ---------- Statistik (persistiert über Sessions/Matches hinweg) ----------
+let stats = null;
+function loadStats() {
+  try { stats = JSON.parse(localStorage.getItem('skat_stats') || 'null'); } catch (e) { stats = null; }
+  if (!stats || !stats.perPlayer) {
+    stats = { perPlayer: [0, 1, 2].map(() => ({ declarerGames: 0, declarerWon: 0, schneider: 0, schwarz: 0, ramschRounds: 0, ramschLost: 0 })) };
+  }
+}
+function saveStats() { try { localStorage.setItem('skat_stats', JSON.stringify(stats)); } catch (e) {} }
+loadStats();
+function recordDeclarerStat(p, won, schneider, schwarz) {
+  const s = stats.perPlayer[p];
+  s.declarerGames++;
+  if (won) s.declarerWon++;
+  if (schneider) s.schneider++;
+  if (schwarz) s.schwarz++;
+  saveStats();
+}
+function recordRamschStat(p, lost) {
+  const s = stats.perPlayer[p];
+  s.ramschRounds++;
+  if (lost) s.ramschLost++;
+  saveStats();
+}
+
 // ---------- Spielzustand ----------
 const P_NAMES = ['Du', 'Anna', 'Bernd'];
 let state = null;
@@ -76,7 +101,8 @@ function newState() {
     round: 0,
     trick: [],
     leader: 0,
-    logs: []
+    logs: [],
+    history: []          // Turnierliste: {round, dealer, label, deltas:[d0,d1,d2]} pro Runde
   };
 }
 
@@ -208,6 +234,7 @@ function aiDiscard(twelve, game) {
 
 // ---------- KI: Kartenspiel (mit Kartenzählen) ----------
 function aiPlay(p, legal, trick, game, declarer) {
+  if (game.type === 'ramsch') return ramschPlay(p, legal, trick, game);
   const info = c => cardInfo(c, game);
   const str = c => info(c).str;
   const grp = c => info(c).suit;                 // Farbe bzw. 'T' für Trumpf
@@ -368,6 +395,26 @@ function simplePlay(p, legal, trick, game, declarer) {
   return byLowAug(legal)[0];                                        // abwerfen
 }
 
+// Ramsch: jeder spielt für sich, will möglichst wenig Augen kassieren
+function ramschPlay(p, legal, trick, game) {
+  const info = c => cardInfo(c, game);
+  const str = c => info(c).str, aug = c => AUGEN[c.r];
+  const byLowAug = a => a.slice().sort((x, y) => aug(x) - aug(y) || str(x) - str(y));
+  const byHighAug = a => a.slice().sort((x, y) => aug(y) - aug(x) || str(y) - str(x));
+
+  if (trick.length === 0) {
+    // niedrig anspielen, Buben (Trumpf) meiden
+    const nonTr = legal.filter(c => !info(c).trump);
+    return byLowAug(nonTr.length ? nonTr : legal)[0];
+  }
+  const led = info(trick[0].card).suit;
+  const bestNow = Math.max(...trick.map(t => (info(t.card).trump || info(t.card).suit === led) ? str(t.card) : -1));
+  const winners = legal.filter(c => (info(c).trump || info(c).suit === led) && str(c) > bestNow);
+  const safe = legal.filter(c => !winners.includes(c));
+  if (safe.length) return byHighAug(safe)[0];   // Stich vermeiden, dabei Punkte loswerden
+  return byLowAug(winners)[0];                  // gezwungen zu gewinnen -> möglichst wenig Augen dazu
+}
+
 // Null: Alleinspieler will keinen Stich; Gegner drücken ihn hinein
 function nullPlay(p, legal, trick, declarer, info, str) {
   const isDecl = p === declarer;
@@ -409,17 +456,16 @@ async function nextRound() {
   renderAll();
   await sleep(300);
 
-  const ok = await reizen();
-  if (!ok) { // alle gepasst -> neu geben
-    bubble('Eingepasst – neu geben.');
-    await sleep(1200);
-    state.dealer = (state.dealer + 1) % 3;
-    return nextRound();
-  }
+  await reizen();
 
-  await declarerPhase();
-  await playTricks();
-  await scoreRound();
+  if (state.game.type === 'ramsch') {
+    await playTricks();
+    await scoreRamsch();
+  } else {
+    await declarerPhase();
+    await playTricks();
+    await scoreRound();
+  }
 
   state.dealer = (state.dealer + 1) % 3;
   await askAction([{ label: 'Nächstes Spiel', value: 'next', cls: 'primary' }]);
@@ -464,12 +510,14 @@ async function reizen() {
   let declarer = d2.winner, reiz = d2.reizwert;
 
   if (reiz === 0) {
-    // Niemand hat geboten -> Vorhand darf ein Spiel ansagen (min. 18)
-    const wantsVH = state.players[VH].isHuman
-      ? await confirmPlay(VH)
-      : (aiMax[VH] >= 18);
-    if (!wantsVH) return false;
-    declarer = VH; reiz = 18;
+    // Niemand hat geboten -> Ramsch
+    state.declarer = null;
+    state.game = { type: 'ramsch', trump: null, hand: false, ouvert: false, label: 'Ramsch' };
+    bubble('Alle passen – Ramsch!');
+    state.logs.push('Alle passen – Ramsch');
+    renderAll();
+    await sleep(900);
+    return;
   }
 
   state.declarer = declarer;
@@ -478,7 +526,6 @@ async function reizen() {
   state.logs.push(`Alleinspieler: ${P_NAMES[declarer]}, Reizwert ${reiz}`);
   renderAll();
   await sleep(900);
-  return true;
 }
 
 // Ein Reiz-Duell; gibt {winner, reizwert}
@@ -549,16 +596,6 @@ async function askReiz(me, opp, val, role) {
     return a === 'yes';
   }
 }
-async function confirmPlay(vh) {
-  setActive(vh);
-  prompt('Beide haben gepasst. Willst du als Vorhand ein Spiel ansagen (mind. 18)?');
-  const a = await askAction([
-    { label: 'Ja, ich spiele', value: 'yes', cls: 'primary' },
-    { label: 'Nein (neu geben)', value: 'no', cls: 'ghostbtn' }
-  ]);
-  return a === 'yes';
-}
-
 // ---------------- Alleinspieler: Skat / Handspiel / Drücken / Spielansage ----------------
 async function declarerPhase() {
   const d = state.declarer;
@@ -574,6 +611,7 @@ async function declarerPhase() {
   const name = g.type === 'suit' ? SUIT_NAME[g.trump] + '-Spiel'
     : g.type === 'grand' ? ('Grand' + (g.ouvert ? ' Ouvert' : '')) : ('Null' + (g.ouvert ? ' Ouvert' : ''));
   const handTag = g.hand && !g.ouvert ? ' (Hand)' : '';
+  g.label = name + handTag;
   bubble(`${P_NAMES[d]} ${vb(d)} ${name}${handTag}.`);
   state.logs.push(`Spielansage: ${name}${handTag}`);
   await sleep(1100);
@@ -804,6 +842,7 @@ async function scoreRound() {
   const declTricks = declPl.tricks;
 
   let won, value, title, detail = '';
+  let schneider = false, schwarz = false;
 
   if (g.type === 'null') {
     won = declTricks === 0;
@@ -812,17 +851,17 @@ async function scoreRound() {
     detail = won ? 'Kein Stich kassiert.' : `${declTricks} Stich(e) kassiert.`;
   } else {
     const mat = countMatadors(state.declarerTwelve, g);
-    const declSchneider = declAugen >= 90;
-    const declSchwarz = declTricks === 10;
+    schneider = declAugen >= 90;
+    schwarz = declTricks === 10;
     let factor = mat + 1 + (g.hand ? 1 : 0);
-    if (declSchneider) factor += 1;
-    if (declSchwarz) factor += 1;
+    if (schneider) factor += 1;
+    if (schwarz) factor += 1;
     if (g.ouvert) factor += 1;                     // Ouvert (Grand Ouvert)
     const grund = g.type === 'grand' ? 24 : GRUNDWERT[g.trump];
     value = grund * factor;
 
     // Gewinnbedingung: Grand Ouvert braucht ALLE Stiche (Schwarz), sonst >= 61 Augen
-    const madePoints = g.ouvert ? declSchwarz : declAugen >= 61;
+    const madePoints = g.ouvert ? schwarz : declAugen >= 61;
     const overbid = value < state.reizwert;
     won = madePoints && !overbid;
 
@@ -830,8 +869,8 @@ async function scoreRound() {
     title = won ? (g.ouvert ? 'Grand Ouvert gewonnen!' : 'Gewonnen!') : 'Verloren';
     detail = `${declAugen} Augen · ${spitz} · Spielwert ${value}`
       + (g.ouvert ? ' · Ouvert' : '')
-      + (declSchneider && !g.ouvert ? ' · Schneider' : '')
-      + (declSchwarz ? ' · Schwarz' : '')
+      + (schneider && !g.ouvert ? ' · Schneider' : '')
+      + (schwarz ? ' · Schwarz' : '')
       + (overbid ? ` · überreizt (bis ${state.reizwert})` : '');
     if (overbid) {
       // Verlustwert auf nächstes Grundwert-Vielfaches ≥ Reizwert anheben
@@ -846,8 +885,52 @@ async function scoreRound() {
   clearActive();
   state.scores[d] += delta;
   state.logs.push(`${title} ${P_NAMES[d]}: ${delta > 0 ? '+' : ''}${delta}`);
+  const deltas = [0, 0, 0]; deltas[d] = delta;
+  state.history.push({ round: state.round, dealer: state.dealer, label: g.label, deltas });
+  recordDeclarerStat(d, won, schneider, schwarz);
   renderScore();
-  showResult(title, won, detail, delta);
+  showResult(title, won, detail + `<br>${P_NAMES[d]}: <b>${delta > 0 ? '+' : ''}${delta}</b>`);
+  await sleep(200);
+}
+
+// Ramsch-Wertung: Verlierer = meiste Augen, Skat geht an den letzten Stich.
+// Durchmarsch (alle 10 Stiche) = fixe -120; sonst -Augen, verdoppelt je "Jungfrau"-Gegner (0 Augen).
+async function scoreRamsch() {
+  const lastWinner = state.leader;
+  state.players[lastWinner].won.push(...state.skat);
+  const augen = state.players.map(pl => pl.won.reduce((s, c) => s + AUGEN[c.r], 0));
+  const durchmarschIdx = state.players.findIndex(pl => pl.tricks === 10);
+
+  prompt(''); clearActive();
+  const augenLine = state.players.map((pl, i) => `${pl.name}: ${augen[i]}`).join(' · ');
+  const deltas = [0, 0, 0];
+  let title, body;
+
+  if (durchmarschIdx >= 0) {
+    deltas[durchmarschIdx] = -120;
+    state.scores[durchmarschIdx] += -120;
+    title = 'Ramsch – Durchmarsch!';
+    body = `${P_NAMES[durchmarschIdx]} hat alle Stiche kassiert.<br>${augenLine}<br>${P_NAMES[durchmarschIdx]}: <b>-120</b>`;
+    state.logs.push(`Ramsch – Durchmarsch ${P_NAMES[durchmarschIdx]}: -120`);
+    recordRamschStat(durchmarschIdx, true);
+    [0, 1, 2].filter(i => i !== durchmarschIdx).forEach(i => recordRamschStat(i, false));
+  } else {
+    const maxAugen = Math.max(...augen);
+    const losers = [0, 1, 2].filter(i => augen[i] === maxAugen);
+    const jungfrauen = [0, 1, 2].filter(i => augen[i] === 0 && !losers.includes(i));
+    const mult = Math.pow(2, jungfrauen.length);
+    const penalty = -maxAugen * mult;
+    losers.forEach(i => { deltas[i] = penalty; state.scores[i] += penalty; });
+    const names = losers.map(i => P_NAMES[i]).join(' & ');
+    title = 'Ramsch';
+    body = `${augenLine}<br>${names}: <b>${penalty}</b>` + (mult > 1 ? ` (×${mult} für Jungfrau)` : '');
+    state.logs.push(`Ramsch – ${names}: ${penalty}${mult > 1 ? ` (×${mult})` : ''}`);
+    [0, 1, 2].forEach(i => recordRamschStat(i, losers.includes(i)));
+  }
+
+  state.history.push({ round: state.round, dealer: state.dealer, label: state.game.label, deltas });
+  renderScore();
+  showResult(title, false, body);
   await sleep(200);
 }
 
@@ -982,13 +1065,12 @@ function askAction(buttons) {
   });
 }
 
-function showResult(title, won, detail, delta) {
+function showResult(title, won, bodyHtml) {
   const center = document.getElementById('center');
   center.querySelector('.result')?.remove();
   const div = document.createElement('div');
   div.className = 'result';
-  div.innerHTML = `<h2 class="${won ? 'won' : 'lost'}">${title}</h2>`
-    + `<div class="detail">${detail}<br>${P_NAMES[state.declarer]}: <b>${delta > 0 ? '+' : ''}${delta}</b></div>`;
+  div.innerHTML = `<h2 class="${won ? 'won' : 'lost'}">${title}</h2><div class="detail">${bodyHtml}</div>`;
   center.appendChild(div);
 }
 
@@ -1026,10 +1108,38 @@ function optionRow(group, current, labels, infos) {
   return `<div class="setrow">${btns}</div><div class="sethint">${infos[current]}</div>`;
 }
 
+function renderSkatliste() {
+  if (!state || !state.history.length) return '<div class="sethint">Noch keine Runde gespielt.</div>';
+  const rows = state.history.map(h =>
+    `<tr><td>${h.round}</td><td>${h.label}</td>` +
+    h.deltas.map(d => `<td class="${d > 0 ? 'plus' : d < 0 ? 'minus' : ''}">${d ? (d > 0 ? '+' : '') + d : ''}</td>`).join('') +
+    `</tr>`
+  ).join('');
+  const totals = state.scores.map(s => `<td><b>${s}</b></td>`).join('');
+  return `<div style="overflow-x:auto"><table class="skattable"><thead><tr><th>#</th><th>Spiel</th>` +
+    `<th>${P_NAMES[0]}</th><th>${P_NAMES[1]}</th><th>${P_NAMES[2]}</th></tr></thead>` +
+    `<tbody>${rows}</tbody><tfoot><tr><td colspan="2">Gesamt</td>${totals}</tr></tfoot></table></div>`;
+}
+
+function renderStatistik() {
+  const rows = [0, 1, 2].map(i => {
+    const s = stats.perPlayer[i];
+    const quote = s.declarerGames ? Math.round(100 * s.declarerWon / s.declarerGames) : 0;
+    return `<tr><td>${P_NAMES[i]}</td><td>${s.declarerWon}/${s.declarerGames} (${quote}%)</td>` +
+      `<td>${s.schneider}</td><td>${s.schwarz}</td><td>${s.ramschLost}/${s.ramschRounds}</td></tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table class="skattable"><thead><tr><th>Spieler</th><th>Alleinspieler-Siege</th>` +
+    `<th>Schneider</th><th>Schwarz</th><th>Ramsch verloren</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 function renderMenu() {
   const box = document.getElementById('logInner');
   box.innerHTML =
-    '<h3>Spielstärke der Gegner</h3>' +
+    '<h3>Turnierliste (aktuelles Match)</h3>' +
+    renderSkatliste() +
+    '<h3 style="margin-top:16px">Statistik (gesamt)</h3>' +
+    renderStatistik() +
+    '<h3 style="margin-top:16px">Spielstärke der Gegner</h3>' +
     optionRow('level', settings.level, { leicht: 'Leicht', mittel: 'Mittel', schwer: 'Schwer' }, LEVEL_INFO) +
     '<h3 style="margin-top:16px">Reiz-Stil der Gegner</h3>' +
     optionRow('reiz', settings.reiz, { vorsichtig: 'Vorsichtig', normal: 'Normal', mutig: 'Mutig' }, REIZ_INFO) +

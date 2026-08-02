@@ -30,6 +30,17 @@ lässt sich die App installieren und offline nutzen.
 - **Wertung** mit Spitzen (mit/ohne), Grundwert, Hand, Schneider, Schwarz,
   Überreizt-Erkennung; Verlust zählt doppelt. Laufende Punktetabelle.
 - Zwei starke KI-Gegner mit **Kartenzählen** und **Positionsspiel** (siehe unten).
+- **Ramsch**: bieten alle drei nichts, gibt's automatisch eine Ramsch-Runde statt
+  Zwangsspiel für Vorhand – jeder spielt für sich und will möglichst wenige Augen
+  kassieren. Trumpf sind wie beim Grand nur die vier Unter. Der Skat geht an den
+  Gewinner des letzten Stichs. Wertung (gängige Wirtshaus-Variante): der Spieler
+  mit den meisten Augen verliert genau diese Augenzahl, verdoppelt für jeden
+  Mitspieler, der komplett leer ausging ("Jungfrau"); wer alle 10 Stiche macht
+  (Durchmarsch), verliert pauschal 120.
+- **Turnierliste**: im Menü (☰) zeigt eine Tabelle jede Runde des aktuellen
+  Matches mit Spielart und Punkten je Spieler, plus Gesamtsumme.
+- **Statistik**: im Menü (☰) werden Alleinspieler-Bilanz, Schneider/Schwarz und
+  Ramsch-Verluste je Spieler dauerhaft gespeichert (überlebt "Neues Match").
 
 ## KI-Stärke
 Die Gegner spielen nicht nur nach Faustregeln, sondern führen ein Kartengedächtnis

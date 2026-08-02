@@ -124,6 +124,13 @@ body{
 #logInner .setrow{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
 #logInner .setrow .btn{min-width:0;flex:1;padding:9px 8px;font-size:14px;box-shadow:none}
 #logInner .sethint{font-size:12px;opacity:.7;margin:4px 0 2px}
+
+.skattable{width:100%;border-collapse:collapse;font-size:13px}
+.skattable th,.skattable td{padding:4px 7px;text-align:center;border-bottom:1px solid #e6ddc4;white-space:nowrap}
+.skattable th:nth-child(2),.skattable td:nth-child(2){text-align:left}
+.skattable td.plus{color:var(--gruen);font-weight:700}
+.skattable td.minus{color:var(--herz);font-weight:700}
+.skattable tfoot td{border-top:2px solid #b79b57;border-bottom:none;font-weight:700}
 #logClose{margin-top:14px}
 
 /* Ergebnis-Panel */

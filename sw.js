@@ -1,4 +1,4 @@
-const CACHE = 'skat-v5';
+const CACHE = 'skat-v6';
 const ASSETS = [
   './', './index.html', './style.css', './app.js',
   './manifest.webmanifest', './icons/icon.svg'
