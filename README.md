@@ -4,6 +4,8 @@ Skat gegen zwei Computergegner als installierbare Web-App (PWA). Deutsches Bild
 (Altenburger Blatt): **Eichel, Grün, Herz, Schellen** mit Daus (A), König, Ober,
 Unter, 10, 9, 8, 7.
 
+Repo: https://github.com/hathi1976-max/claude-skat
+
 ## Starten
 Einfach `index.html` im Browser öffnen, oder lokal servieren:
 
