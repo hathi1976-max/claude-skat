@@ -994,15 +994,22 @@ function renderMyHand(game, decorate) {
 function attachDragReorder(c, el, hand, rerender) {
   const tapFn = el.onclick;
   el.onclick = null;
-  let sx = 0, sy = 0, dragging = false;
+  let sx = 0, sy = 0, dragging = false, elRect = null, boxRect = null;
   el.addEventListener('pointerdown', e => {
     sx = e.clientX; sy = e.clientY; dragging = false;
+    elRect = el.getBoundingClientRect();
+    boxRect = el.parentElement.getBoundingClientRect();
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
   });
   el.addEventListener('pointermove', e => {
-    const dx = e.clientX - sx, dy = e.clientY - sy;
+    let dx = e.clientX - sx, dy = e.clientY - sy;
     if (!dragging && Math.hypot(dx, dy) > 6) { dragging = true; el.classList.add('dragging'); }
-    if (dragging) el.style.transform = `translate(${dx}px, ${dy}px)`;
+    if (dragging) {
+      // Karte darf die Handfläche beim Ziehen nicht verlassen (sonst "verschwindet" sie optisch)
+      dx = Math.max(boxRect.left - elRect.left, Math.min(boxRect.right - elRect.right, dx));
+      dy = Math.max(boxRect.top - elRect.top, Math.min(boxRect.bottom - elRect.bottom, dy));
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
   });
   el.addEventListener('pointerup', e => {
     try { el.releasePointerCapture(e.pointerId); } catch (err) {}
