@@ -73,4 +73,7 @@ Der Alleinspieler braucht **61** zum Sieg (90+ = Schneider, alle Stiche = Schwar
 ## Bedienung
 Karten unten sind deine Hand; anklickbare (legale) Karten heben sich hervor.
 Trümpfe sind mit goldenem Rand markiert. Über **☰** oben rechts gibt es den
-Spielverlauf und „Neues Match".
+Spielverlauf und „Neues Match". Die Handkarten lassen sich per Ziehen frei
+selbst anordnen (Maus oder Finger) – ein normaler Tap spielt weiterhin die
+Karte. Zu Rundenbeginn und nach dem Drücken wird die Hand einmal automatisch
+sortiert, danach bleibt die eigene Anordnung für den Rest der Runde erhalten.

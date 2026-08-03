@@ -63,11 +63,12 @@ body{
   box-shadow:var(--shadow);position:relative;flex:0 0 auto;
   border:1px solid rgba(0,0,0,.25);
 }
-.hand-me .card{width:62px;height:92px;transition:transform .12s,margin .12s}
+.hand-me .card{width:62px;height:92px;transition:transform .12s,margin .12s;touch-action:none}
 .hand-me .card:not(:first-child){margin-left:-14px}
 .hand-me .card.playable{cursor:pointer}
 .hand-me .card.playable:hover{transform:translateY(-14px)}
 .hand-me .card.disabled{filter:brightness(.72) saturate(.6)}
+.hand-me .card.dragging{transition:none;cursor:grabbing;z-index:50;opacity:.85;box-shadow:0 10px 24px rgba(0,0,0,.45)}
 .card .corner{position:absolute;font-weight:800;line-height:1;display:flex;flex-direction:column;align-items:center}
 .card .corner.tl{top:4px;left:5px;font-size:15px}
 .card .corner.br{bottom:4px;right:5px;transform:rotate(180deg);font-size:15px}

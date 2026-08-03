@@ -980,12 +980,57 @@ function renderAll() {
 function renderMyHand(game, decorate) {
   const box = document.getElementById('myhand');
   box.innerHTML = '';
-  sortHand(state.players[0].hand, game);
-  for (const c of state.players[0].hand) {
+  const hand = state.players[0].hand;
+  for (const c of hand) {
     const el = cardEl(c, { showTrump: !!game });
     if (decorate) decorate(c, el);
+    attachDragReorder(c, el, hand, () => renderMyHand(game, decorate));
     box.appendChild(el);
   }
+}
+
+// Handkarten per Ziehen selbst anordnen (Maus & Touch über Pointer Events).
+// Ein Tap ohne Bewegung löst weiterhin die von decorate() gesetzte Aktion aus.
+function attachDragReorder(c, el, hand, rerender) {
+  const tapFn = el.onclick;
+  el.onclick = null;
+  let sx = 0, sy = 0, dragging = false;
+  el.addEventListener('pointerdown', e => {
+    sx = e.clientX; sy = e.clientY; dragging = false;
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  el.addEventListener('pointermove', e => {
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!dragging && Math.hypot(dx, dy) > 6) { dragging = true; el.classList.add('dragging'); }
+    if (dragging) el.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
+  el.addEventListener('pointerup', e => {
+    try { el.releasePointerCapture(e.pointerId); } catch (err) {}
+    if (dragging) {
+      const box = el.parentElement;
+      const others = [...box.children].filter(x => x !== el);
+      let targetIdx = others.length;
+      if (others.length) {
+        // nächstgelegene Nachbarkarte (auch bei mehrzeiliger Hand), davor/danach einsortieren
+        let bestI = 0, bestDist = Infinity;
+        others.forEach((sib, i) => {
+          const r = sib.getBoundingClientRect();
+          const d = Math.hypot((r.left + r.width / 2) - e.clientX, (r.top + r.height / 2) - e.clientY);
+          if (d < bestDist) { bestDist = d; bestI = i; }
+        });
+        const r = others[bestI].getBoundingClientRect();
+        targetIdx = e.clientX < r.left + r.width / 2 ? bestI : bestI + 1;
+      }
+      const idx = hand.findIndex(x => cardId(x) === cardId(c));
+      if (idx >= 0) { hand.splice(idx, 1); hand.splice(targetIdx, 0, c); }
+      rerender();
+    } else {
+      el.style.transform = '';
+      el.classList.remove('dragging');
+      if (tapFn) tapFn();
+    }
+  });
+  el.addEventListener('pointercancel', () => { el.style.transform = ''; el.classList.remove('dragging'); });
 }
 
 function renderOpps() {
