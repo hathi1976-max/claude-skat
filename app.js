@@ -458,7 +458,7 @@ async function nextRound() {
 
   await reizen();
 
-  if (state.game.type === 'ramsch') {
+  if (state.declarer === null) {
     await playTricks();
     await scoreRamsch();
   } else {
