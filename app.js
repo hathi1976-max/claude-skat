@@ -430,16 +430,52 @@ function nullPlay(p, legal, trick, declarer, info, str) {
 
 // ============================ ABLAUF ============================
 
-let uiResolver = null;   // löst Button-Aktionen auf
 let cardResolver = null; // löst Kartenklick auf
 let cardLegal = null;
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Generationszähler: jede Runden-Kette merkt sich beim Start ihre Generation.
+// Startet der Spieler ein neues Match, wird gen erhöht und alle wartenden
+// Promises (Timer, Buttons, Kartenklick) brechen mit ABORT ab – sonst würde die
+// alte Kette nach dem nächsten await auf dem neuen state weiterspielen.
+const ABORT = Symbol('Spielabbruch');
+let gen = 0;
+let pendingAborts = new Set();   // Abbruchfunktionen der gerade wartenden Promises
+
+function abortRun() {
+  gen++;
+  const list = [...pendingAborts];
+  pendingAborts.clear();
+  cardResolver = null; cardLegal = null;
+  for (const cancel of list) cancel();
+}
+
+// Tempo der Spielpausen (1 = normal). Tests setzen den Faktor auf 0.
+let waitFactor = 1;
+// Wartet ms Millisekunden; bricht ab, sobald eine neue Generation läuft.
+function wait(ms) {
+  if (waitFactor === 0) return Promise.resolve();   // Testmodus: ohne Timer durchlaufen
+  return new Promise((resolve, reject) => {
+    const cancel = () => { clearTimeout(t); reject(ABORT); };
+    const t = setTimeout(() => { pendingAborts.delete(cancel); resolve(); }, ms * waitFactor);
+    pendingAborts.add(cancel);
+  });
+}
 
 function startGame() {
+  abortRun();          // laufende Runden-Kette beenden, bevor state ersetzt wird
   state = newState();
   renderScore();
-  nextRound();
+  runLoop();
+}
+
+// Rundenschleife: läuft, bis eine neue Generation startet (statt Rekursion in nextRound)
+async function runLoop() {
+  const g = gen;
+  try {
+    while (g === gen) await nextRound();
+  } catch (e) {
+    if (e !== ABORT) throw e;
+  }
 }
 
 async function nextRound() {
@@ -454,7 +490,7 @@ async function nextRound() {
   deal();
   state.leader = vorhand();
   renderAll();
-  await sleep(300);
+  await wait(300);
 
   await reizen();
 
@@ -470,7 +506,6 @@ async function nextRound() {
   state.dealer = (state.dealer + 1) % 3;
   await askAction([{ label: 'Nächstes Spiel', value: 'next', cls: 'primary' }]);
   document.getElementById('center').querySelector('.result')?.remove();
-  nextRound();
 }
 
 function vorhand() { return (state.dealer + 1) % 3; }
@@ -499,7 +534,7 @@ async function reizen() {
   state.players.forEach((pl, i) => { if (!pl.isHuman) aiMax[i] = reizMax(pl.hand); });
 
   bubble('Reizen …');
-  await sleep(450);
+  await wait(450);
 
   // Duell 1: MH bietet, VH hält
   let d1 = await duel(MH, VH, 18, 0, aiMax);
@@ -516,7 +551,7 @@ async function reizen() {
     bubble('Alle passen – Ramsch!');
     state.logs.push('Alle passen – Ramsch');
     renderAll();
-    await sleep(900);
+    await wait(900);
     return;
   }
 
@@ -525,7 +560,7 @@ async function reizen() {
   bubble(`${P_NAMES[declarer]} ${vb(declarer)} (gereizt bis ${reiz}).`);
   state.logs.push(`Alleinspieler: ${P_NAMES[declarer]}, Reizwert ${reiz}`);
   renderAll();
-  await sleep(900);
+  await wait(900);
 }
 
 // Ein Reiz-Duell; gibt {winner, reizwert}
@@ -558,7 +593,7 @@ async function duel(bidder, holder, startVal, standing, aiMax) {
 async function aiSay(p, text, strong) {
   setActive(p);
   bubble(`${P_NAMES[p]}: <span class="reizsay">${text}</span>`);
-  await sleep(strong ? 560 : 440);
+  await wait(strong ? 560 : 440);
 }
 async function aiBid(p, val, aiMax) {
   const yes = aiMax[p] >= val;
@@ -575,24 +610,24 @@ async function askReiz(me, opp, val, role) {
   setActive(me);
   const other = P_NAMES[opp];
   if (role === 'bid') {
-    prompt(`Reizen gegen <b>${other}</b>. <b>${val}</b> sagen?`);
+    zeigeHinweis(`Reizen gegen <b>${other}</b>. <b>${val}</b> sagen?`);
     const a = await askAction([
       { label: `${val} sagen`, value: 'yes', cls: 'primary' },
       { label: 'Passe', value: 'no', cls: 'danger' }
     ]);
     if (a === 'yes') { bubble(`Du: ${val}`); state.logs.push(`Du sagst ${val}`); }
     else { bubble('Du: Passe'); state.logs.push('Du passt'); }
-    await sleep(350);
+    await wait(350);
     return a === 'yes';
   } else {
-    prompt(`<b>${other}</b> sagt <b>${val}</b>. Halten?`);
+    zeigeHinweis(`<b>${other}</b> sagt <b>${val}</b>. Halten?`);
     const a = await askAction([
       { label: `${val} halten (Ja)`, value: 'yes', cls: 'primary' },
       { label: 'Passe', value: 'no', cls: 'danger' }
     ]);
     if (a === 'yes') { bubble(`Du hältst ${val}`); state.logs.push(`Du hältst ${val}`); }
     else { bubble('Du: Passe'); state.logs.push('Du passt'); }
-    await sleep(350);
+    await wait(350);
     return a === 'yes';
   }
 }
@@ -614,7 +649,7 @@ async function declarerPhase() {
   g.label = name + handTag;
   bubble(`${P_NAMES[d]} ${vb(d)} ${name}${handTag}.`);
   state.logs.push(`Spielansage: ${name}${handTag}`);
-  await sleep(1100);
+  await wait(1100);
 }
 
 // Unschlagbare Grand-Hand? (alle 10 Stiche sicher -> Grand Ouvert)
@@ -652,7 +687,7 @@ async function aiDeclare(d) {
     state.game = { type: 'grand', trump: null, hand: true, ouvert: true };
     state.declarerTwelve = hand10.concat(state.skat);
     state.revealed = [d];                                            // Karten offen legen
-    await sleep(700);
+    await wait(700);
     return;
   }
 
@@ -661,7 +696,7 @@ async function aiDeclare(d) {
   if (handGame) {
     state.game = handGame;
     state.declarerTwelve = hand10.concat(state.skat);               // Skat zählt für Spitzen/Punkte
-    await sleep(700);
+    await wait(700);
     return;
   }
 
@@ -675,12 +710,12 @@ async function aiDeclare(d) {
   state.skat = discard;
   state.declarerTwelve = twelve;
   showSkatTaken();
-  await sleep(700);
+  await wait(700);
 }
 
 async function humanDeclare() {
   const pl = state.players[0];
-  prompt('Skat aufnehmen oder aus der Hand spielen?');
+  zeigeHinweis('Skat aufnehmen oder aus der Hand spielen?');
   const choice = await askAction([
     { label: 'Skat aufnehmen', value: 'take', cls: 'primary' },
     { label: 'Hand spielen', value: 'hand', cls: 'ghostbtn' }
@@ -714,32 +749,33 @@ async function humanDeclare() {
   if (choice === 'take') showSkatTaken();
 }
 
-function humanDiscard() {
-  return new Promise(resolve => {
-    const chosen = [];
-    prompt('Wähle <b>2 Karten</b> zum Drücken (klick zum Aus-/Abwählen).');
-    const render = () => {
-      renderMyHand(null, (c, el) => {
-        el.classList.add('playable');
-        if (chosen.find(x => cardId(x) === cardId(c))) el.classList.add('sel');
-        el.onclick = () => {
-          const idx = chosen.findIndex(x => cardId(x) === cardId(c));
-          if (idx >= 0) chosen.splice(idx, 1);
-          else if (chosen.length < 2) chosen.push(c);
-          render();
-        };
-      });
-    };
-    render();
-    askAction([{ label: 'Drücken bestätigen', value: 'ok', cls: 'primary' }]).then(() => {
-      if (chosen.length !== 2) { render(); return humanDiscard().then(resolve); }
-      resolve(chosen);
+// Schleife statt Rekursion: bei Fehlklicks wächst sonst eine Promise-Kette ohne Ende
+async function humanDiscard() {
+  const chosen = [];
+  const render = () => {
+    renderMyHand(null, (c, el) => {
+      el.classList.add('playable');
+      if (chosen.find(x => cardId(x) === cardId(c))) el.classList.add('sel');
+      el.onclick = () => {
+        const idx = chosen.findIndex(x => cardId(x) === cardId(c));
+        if (idx >= 0) chosen.splice(idx, 1);
+        else if (chosen.length < 2) chosen.push(c);
+        render();
+      };
     });
-  });
+  };
+  zeigeHinweis('Wähle <b>2 Karten</b> zum Drücken (klick zum Aus-/Abwählen).');
+  render();
+  while (true) {
+    await askAction([{ label: 'Drücken bestätigen', value: 'ok', cls: 'primary' }]);
+    if (chosen.length === 2) return chosen;
+    zeigeHinweis('Bitte genau <b>2 Karten</b> wählen.');
+    render();
+  }
 }
 
 async function humanChooseGame(hand, isHand) {
-  prompt('Welches Spiel?');
+  zeigeHinweis('Welches Spiel?');
   const top = await askAction([
     { label: 'Farbspiel', value: 'suit', cls: 'primary' },
     { label: 'Grand', value: 'grand' },
@@ -747,7 +783,7 @@ async function humanChooseGame(hand, isHand) {
   ]);
   if (top === 'grand') {
     if (isHand) { // Grand Ouvert nur als Handspiel (offen, alle Stiche nötig)
-      prompt('Grand – offen (Ouvert) spielen? Ouvert erfordert <b>alle</b> Stiche.');
+      zeigeHinweis('Grand – offen (Ouvert) spielen? Ouvert erfordert <b>alle</b> Stiche.');
       const o = await askAction([
         { label: 'Grand', value: 'no', cls: 'primary' },
         { label: 'Grand Ouvert', value: 'yes' }
@@ -757,14 +793,14 @@ async function humanChooseGame(hand, isHand) {
     return { type: 'grand', trump: null, ouvert: false };
   }
   if (top === 'null') {
-    prompt('Null – offen (Ouvert) spielen?');
+    zeigeHinweis('Null – offen (Ouvert) spielen?');
     const o = await askAction([
       { label: 'Null', value: 'no', cls: 'primary' },
       { label: 'Null Ouvert', value: 'yes' }
     ]);
     return { type: 'null', trump: null, ouvert: o === 'yes' };
   }
-  prompt('Welche Trumpffarbe?');
+  zeigeHinweis('Welche Trumpffarbe?');
   const t = await askAction([
     { label: 'Eichel ' + suitGlyph('E'), value: 'E', cls: 'primary' },
     { label: 'Grün ' + suitGlyph('G'), value: 'G' },
@@ -777,7 +813,7 @@ async function humanChooseGame(hand, isHand) {
 // ---------------- Stiche spielen ----------------
 async function playTricks() {
   clearActive();
-  prompt('');
+  zeigeHinweis('');
   resetTracker();
   for (let t = 0; t < 10; t++) {
     state.trick = [];
@@ -789,17 +825,19 @@ async function playTricks() {
       if (state.players[p].isHuman) {
         card = await humanPlay(legal);
       } else {
-        await sleep(650);
+        await wait(650);
         card = aiPlay(p, legal, state.trick, state.game, state.declarer);
       }
-      // Karte aus Hand entfernen
+      // Karte aus Hand entfernen; splice(-1) würde sonst still die letzte Karte löschen
       const h = state.players[p].hand;
-      h.splice(h.findIndex(c => cardId(c) === cardId(card)), 1);
+      const idx = h.findIndex(c => cardId(c) === cardId(card));
+      if (idx < 0) { console.error('Karte nicht in der Hand', card, h); return; }
+      h.splice(idx, 1);
       const ledSuit = state.trick.length ? cardInfo(state.trick[0].card, state.game).suit : null;
       state.trick.push({ p, card });
       noteCard(p, card, ledSuit); // Kartengedächtnis aktualisieren
       renderAll();
-      await sleep(150);
+      await wait(150);
     }
     // Stich auswerten
     const w = trickWinner(state.trick, state.game);
@@ -808,16 +846,18 @@ async function playTricks() {
     state.leader = w;
     bubble(`Stich für ${P_NAMES[w]}`);
     renderAll();
-    await sleep(900);
+    await wait(900);
     clearTrick();
   }
 }
 
 function humanPlay(legal) {
-  return new Promise(resolve => {
-    prompt('Du bist am Zug – spiel eine Karte.');
+  return new Promise((resolve, reject) => {
+    zeigeHinweis('Du bist am Zug – spiel eine Karte.');
     cardLegal = new Set(legal.map(cardId));
-    cardResolver = resolve;
+    const cancel = () => reject(ABORT);
+    pendingAborts.add(cancel);
+    cardResolver = c => { pendingAborts.delete(cancel); resolve(c); };
     renderMyHand(state.game, (c, el) => {
       if (cardLegal.has(cardId(c))) {
         el.classList.add('playable');
@@ -881,7 +921,7 @@ async function scoreRound() {
   }
 
   const delta = won ? value : -2 * value;
-  prompt('');
+  zeigeHinweis('');
   clearActive();
   state.scores[d] += delta;
   state.logs.push(`${title} ${P_NAMES[d]}: ${delta > 0 ? '+' : ''}${delta}`);
@@ -890,7 +930,7 @@ async function scoreRound() {
   recordDeclarerStat(d, won, schneider, schwarz);
   renderScore();
   showResult(title, won, detail + `<br>${P_NAMES[d]}: <b>${delta > 0 ? '+' : ''}${delta}</b>`);
-  await sleep(200);
+  await wait(200);
 }
 
 // Ramsch-Wertung: Verlierer = meiste Augen, Skat geht an den letzten Stich.
@@ -901,7 +941,7 @@ async function scoreRamsch() {
   const augen = state.players.map(pl => pl.won.reduce((s, c) => s + AUGEN[c.r], 0));
   const durchmarschIdx = state.players.findIndex(pl => pl.tricks === 10);
 
-  prompt(''); clearActive();
+  zeigeHinweis(''); clearActive();
   const augenLine = state.players.map((pl, i) => `${pl.name}: ${augen[i]}`).join(' · ');
   const deltas = [0, 0, 0];
   let title, body;
@@ -931,7 +971,7 @@ async function scoreRamsch() {
   state.history.push({ round: state.round, dealer: state.dealer, label: state.game.label, deltas });
   renderScore();
   showResult(title, false, body);
-  await sleep(200);
+  await wait(200);
 }
 
 function isMit(cards, game) {
@@ -1063,8 +1103,7 @@ function renderTrick() {
   box.innerHTML = '';
   for (const t of state.trick) {
     const el = cardEl(t.card, { showTrump: true });
-    // Position relativ zum Ausspieler
-    const rel = (t.p - state.leader + 3) % 3; // 0=Ausspieler
+    // Ablageplatz nach Sitz des Spielers
     const posClass = t.p === 0 ? 't0' : t.p === 2 ? 't2' : 't1';
     el.classList.add(posClass);
     box.appendChild(el);
@@ -1099,19 +1138,21 @@ function setActive(i) { clearActive(); document.getElementById('seat-' + i)?.cla
 function clearActive() { document.querySelectorAll('.seat').forEach(s => s.classList.remove('active')); }
 
 function bubble(txt) { document.getElementById('bubble').innerHTML = txt; }
-function prompt(txt) { document.getElementById('prompt').innerHTML = txt; }
+function zeigeHinweis(txt) { document.getElementById('prompt').innerHTML = txt; }
 function clearTrick() { state.trick = []; document.getElementById('trick').innerHTML = ''; }
 function showSkatTaken() { /* Platzhalter für spätere Animation */ }
 
 function askAction(buttons) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const box = document.getElementById('actions');
     box.innerHTML = '';
+    const cancel = () => { box.innerHTML = ''; reject(ABORT); };
+    pendingAborts.add(cancel);
     for (const b of buttons) {
       const el = document.createElement('button');
       el.className = 'btn ' + (b.cls || '');
       el.innerHTML = b.label;
-      el.onclick = () => { box.innerHTML = ''; resolve(b.value); };
+      el.onclick = () => { pendingAborts.delete(cancel); box.innerHTML = ''; resolve(b.value); };
       box.appendChild(el);
     }
   });
@@ -1208,6 +1249,9 @@ function renderMenu() {
     };
   });
   document.getElementById('restartBtn').onclick = () => {
+    // Rückfrage nur, wenn wirklich eine Runde läuft (sonst gibt es nichts zu verwerfen)
+    const laeuft = state && (state.round > 1 || state.players.some(pl => pl.hand.length));
+    if (laeuft && !confirm('Laufendes Spiel verwerfen und neues Match starten?')) return;
     document.getElementById('log').classList.add('hidden'); startGame();
   };
 }
