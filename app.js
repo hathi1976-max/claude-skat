@@ -545,7 +545,30 @@ async function reizen() {
   let declarer = d2.winner, reiz = d2.reizwert;
 
   if (reiz === 0) {
-    // Niemand hat geboten -> Ramsch
+    // Haben MH und HH sofort gepasst, hat Vorhand noch gar nichts gesagt:
+    // sie darf jetzt ansagen, dass sie bei 18 spielt (sonst Ramsch).
+    setActive(VH);
+    let willSpielen;
+    if (state.players[VH].isHuman) {
+      zeigeHinweis('Beide passen. Spielst du für <b>18</b>?');
+      willSpielen = await askAction([
+        { label: 'Ja, ich spiele (18)', value: 'yes', cls: 'primary' },
+        { label: 'Nein – Ramsch', value: 'no', cls: 'danger' }
+      ]) === 'yes';
+      bubble(willSpielen ? 'Du: 18' : 'Du: Ramsch');
+      state.logs.push(willSpielen ? 'Du spielst für 18' : 'Du willst nicht – Ramsch');
+      await wait(350);
+    } else {
+      willSpielen = aiMax[VH] >= 18;
+      await aiSay(VH, willSpielen ? '18' : 'Ramsch', willSpielen);
+      state.logs.push(`${P_NAMES[VH]} ${willSpielen ? 'spielt für 18' : 'will nicht – Ramsch'}`);
+    }
+    if (willSpielen) { declarer = VH; reiz = 18; }
+    zeigeHinweis('');
+  }
+
+  if (reiz === 0) {
+    // Auch Vorhand will nicht -> Ramsch
     state.declarer = null;
     state.game = { type: 'ramsch', trump: null, hand: false, ouvert: false, label: 'Ramsch' };
     bubble('Alle passen – Ramsch!');

@@ -15,7 +15,22 @@ der den Spielzustand zerstören kann.
 
 ## A. Kritisch
 
-### A1. Vorhand wird nie gefragt, ob sie spielen will
+### A1. Vorhand wird nie gefragt, ob sie spielen will — ✅ erledigt 05.08.2026
+
+> **Behoben.** `reizen()` fragt die Vorhand jetzt, bevor der Ramsch fällt: der
+> Mensch über zwei Knöpfe („Ja, ich spiele (18)" / „Nein – Ramsch"), die KI über
+> `aiMax[VH] >= 18`, sichtbar per `aiSay` mit „18" bzw. „Ramsch". Erst wenn auch
+> die Vorhand ablehnt, greift der Ramsch-Zweig. **Häufigkeit nachgemessen**
+> (5.000 zufällige Blätter je Reiz-Stil, Nachbau der Reizlogik in Python):
+>
+> | Reiz-Stil | MH+HH passen | davon: VH hätte gespielt | betroffene Runden |
+> |---|---|---|---|
+> | vorsichtig | 27,6 % | 59,6 % | **16,5 %** |
+> | normal | 12,1 % | 86,1 % | **10,4 %** |
+> | mutig | 0,7 % | 100 % | 0,7 % |
+>
+> Bei der Voreinstellung *normal* ging also jede zehnte Runde zu Unrecht in den
+> Ramsch. Tests: `tests/ablauf.test.js › Vorhand-Frage (A1)`.
 
 **Wo:** `reizen()` (`app.js:495-529`), `duel()` (`:532-555`)
 
@@ -45,15 +60,16 @@ Bei der KI-Variante zusätzlich über `aiSay` sichtbar machen, damit der Ablauf
 nachvollziehbar bleibt. Anschließend fällt der Ramsch-Zweig nur noch, wenn auch
 Vorhand ablehnt.
 
-### A2. Kein Generationszähler — alter Spielablauf läuft nach Neustart weiter
+### A2. Kein Generationszähler — alter Spielablauf läuft nach Neustart weiter — ✅ erledigt 04.08.2026
 
-✅ erledigt 04.08.2026 — `gen`, `abortRun()` und `wait()` eingeführt: wartende
-Timer, `askAction` und `humanPlay` werden beim Neustart mit `ABORT` abgewiesen,
-die alte Kette bricht ab (Variante „Exception" aus der Anweisung, dadurch keine
-vergessenen Prüfungen nach einzelnen `await`s). `nextRound()` ruft sich nicht
-mehr selbst auf, stattdessen Schleife in `runLoop()`. Neustart-Knopf fragt nach.
-Nachgemessen im Browser: alter Stand erzeugt beim Neustart während einer Pause
-zwei parallele Ketten (Log-Eintrag „Spiel 1 – Geber" doppelt), neuer Stand eine.
+> **Behoben.** `gen`, `abortRun()` und `wait()` eingeführt: wartende Timer,
+> `askAction` und `humanPlay` werden beim Neustart mit `ABORT` abgewiesen, die
+> alte Kette bricht ab (Variante „Exception" aus der Anweisung, dadurch keine
+> vergessenen Prüfungen nach einzelnen `await`s). `nextRound()` ruft sich nicht
+> mehr selbst auf, stattdessen Schleife in `runLoop()`. Der Neustart-Knopf fragt
+> nach. Nachgemessen im Browser: alter Stand erzeugt beim Neustart während einer
+> Pause zwei parallele Ketten (Log-Eintrag „Spiel 1 – Geber" doppelt), neuer
+> Stand genau eine.
 
 **Wo:** `nextRound()` (`:445-474`), Neustart-Knopf in `renderMenu` (`:1210-1212`)
 
@@ -86,11 +102,11 @@ Reversi im Nachbarprojekt löst das bereits vorbildlich mit `state.session`
 4. Zusätzlich: den Neustart-Knopf hinter eine Rückfrage legen ("Laufendes Spiel
    verwerfen?").
 
-### A3. `splice(-1)` bei nicht gefundener Karte
+### A3. `splice(-1)` bei nicht gefundener Karte — ✅ erledigt 04.08.2026
 
-✅ erledigt 04.08.2026 — Guard eingebaut. Diagnose nachgemessen: `splice(-1, 1)`
-entfernt tatsächlich die letzte Handkarte. Gegenprobe mit einer KI, die absichtlich
-eine Fremdkarte liefert: Hand bleibt jetzt unverändert, `console.error` meldet.
+> **Behoben.** Guard eingebaut. Diagnose nachgemessen: `splice(-1, 1)` entfernt
+> tatsächlich die letzte Handkarte. Gegenprobe mit einer KI, die absichtlich eine
+> Fremdkarte liefert: Hand bleibt jetzt unverändert, `console.error` meldet.
 
 **Wo:** `playTricks()` (`:797`)
 
@@ -242,10 +258,10 @@ const offenIds = new Set(
 ```
 und diese IDs zusätzlich ausfiltern. Hängt an B1 — beides zusammen umsetzen.
 
-### C3. `humanDiscard` rekursiert über Promises
+### C3. `humanDiscard` rekursiert über Promises — ✅ erledigt 04.08.2026
 
-✅ erledigt 04.08.2026 — als `async`-Schleife neu geschrieben (zusammen mit A2,
-weil die Promise-Kette sonst auch den Abbruch überlebt hätte).
+> **Behoben.** Als `async`-Schleife neu geschrieben (zusammen mit A2, weil die
+> Promise-Kette sonst auch den Abbruch überlebt hätte).
 
 **Wo:** `:717-739`
 
@@ -267,10 +283,9 @@ async function humanDiscard() {
 ```
 Sauberer wäre, den Bestätigungsknopf zu deaktivieren, solange `chosen.length !== 2`.
 
-### C4. Tote Variable
+### C4. Tote Variable — ✅ erledigt 04.08.2026
 
-✅ erledigt 04.08.2026 — `rel` entfernt, ebenso die nie benutzte Variable
-`uiResolver`.
+> **Behoben.** `rel` entfernt, ebenso die nie benutzte Variable `uiResolver`.
 
 **Wo:** `renderTrick()` (`:1067`) — `const rel = (t.p - state.leader + 3) % 3;`
 wird berechnet und nie benutzt. Entfernen.
