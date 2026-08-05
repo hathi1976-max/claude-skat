@@ -107,11 +107,20 @@ function newState() {
 }
 
 // ---------- Karten-Logik ----------
+// Trumpf, Bedien-Farbe und Stärke einer Karte im jeweiligen Spiel.
+// 'T' als suit heißt: gehört zur Trumpf-Gruppe (Unter + ggf. Trumpffarbe).
 function cardInfo(c, game) {
   if (!game) return { trump: false, suit: c.s, str: FARBSTR[c.r] ?? 0 };
+  // Null: kein Trumpf, eigene Reihenfolge (A,K,O,U,10,9,8,7)
   if (game.type === 'null') return { trump: false, suit: c.s, str: NULLSTR[c.r] };
+  // Grand und Ramsch: nur die vier Unter sind Trumpf (Ramsch wird wie Grand gespielt)
+  if (game.type === 'grand' || game.type === 'ramsch') {
+    return c.r === 'U' ? { trump: true, suit: 'T', str: 200 + UNTER_BONUS[c.s] }
+                       : { trump: false, suit: c.s, str: FARBSTR[c.r] };
+  }
+  // Farbspiel: vier Unter über der kompletten Trumpffarbe
   if (c.r === 'U') return { trump: true, suit: 'T', str: 200 + UNTER_BONUS[c.s] };
-  if (game.type === 'suit' && c.s === game.trump) return { trump: true, suit: 'T', str: 100 + FARBSTR[c.r] };
+  if (c.s === game.trump) return { trump: true, suit: 'T', str: 100 + FARBSTR[c.r] };
   return { trump: false, suit: c.s, str: FARBSTR[c.r] };
 }
 
@@ -257,8 +266,34 @@ function aiPlay(p, legal, trick, game, declarer) {
   const isMaster = c => !higherUnseen(c);        // höchste noch lebende Karte ihrer Gruppe
   const opponents = [0, 1, 2].filter(x => x !== p && ((x === declarer) !== isDecl));
   const voidOpp = suit => opponents.some(o => tracker.void[o].has(suit));
+
+  // --- Ouvert: offen liegende Hände muss die KI nicht raten ---
+  // Wichtig: die offenen Karten bleiben in `unseen` (sie sind ja weiter im
+  // Spiel und können stechen). Der Gewinn liegt darin, für einen konkreten
+  // Gegner exakt sagen zu können, ob er eine Karte überhaupt schlagen kann.
+  const offeneHand = o => (o !== p && state.revealed.includes(o)) ? state.players[o].hand : null;
+  // true/false wenn die Hand offen liegt, sonst null (= unbekannt, Heuristik)
+  const kannSchlagen = (o, c, ledSuit) => {
+    const h = offeneHand(o);
+    if (!h || !h.length) return h ? false : null;
+    const bedienen = h.filter(x => grp(x) === ledSuit);
+    const moeglich = bedienen.length ? bedienen : h;   // Bedienzwang, sonst freie Wahl
+    return moeglich.some(x => (info(x).trump || grp(x) === ledSuit) && str(x) > str(c));
+  };
+  // Wissen alle in Frage kommenden Gegner offen? Dann exakt entscheiden.
+  const exaktSicher = (gegner, c, ledSuit) => {
+    if (!gegner.length) return true;
+    const urteil = gegner.map(o => kannSchlagen(o, c, ledSuit));
+    if (urteil.some(x => x === null)) return null;
+    return !urteil.some(Boolean);
+  };
+
   // Ass/Meister gefahrlos anspielen? (nur Trumpf-Stich wäre gefährlich)
-  const safeCash = c => isMaster(c) && !(unseenTrumps > 0 && voidOpp(c.s));
+  const safeCash = c => {
+    const exakt = exaktSicher(opponents, c, grp(c));
+    if (exakt !== null) return exakt;
+    return isMaster(c) && !(unseenTrumps > 0 && voidOpp(c.s));
+  };
 
   const byLowStr = a => a.slice().sort((x, y) => str(x) - str(y));
   const byHighStr = a => a.slice().sort((x, y) => str(y) - str(x));
@@ -324,6 +359,8 @@ function aiPlay(p, legal, trick, game, declarer) {
   // Hält meine Gewinnkarte? Nur Gegner, die NACH mir spielen, sind eine Gefahr.
   const safeWin = c => {
     if (oppAfter.length === 0) return true;                       // niemand vom Gegner kommt noch
+    const exakt = exaktSicher(oppAfter, c, ledSuit);
+    if (exakt !== null) return exakt;                             // Ouvert: exakt statt geschätzt
     if (info(c).trump) return !unseen.some(u => info(u).trump && str(u) > str(c));
     if (unseen.some(u => grp(u) === ledSuit && str(u) > str(c))) return false; // höhere Farbkarte draußen
     if (unseenTrumps > 0 && oppAfter.some(o => tracker.void[o].has(ledSuit))) return false; // Gegner sticht
@@ -333,7 +370,8 @@ function aiPlay(p, legal, trick, game, declarer) {
   if (winnerIsAlly && curWinner !== p) {
     // Partner führt -> schmieren, wenn der Stich sicher ist (kein Gegner mehr hinter mir, oder Meisterkarte)
     const winCard = trick.find(t => t.p === curWinner).card;
-    const partnerSafe = oppAfter.length === 0 || isMaster(winCard);
+    const exaktPartner = exaktSicher(oppAfter, winCard, ledSuit);
+    const partnerSafe = exaktPartner !== null ? exaktPartner : isMaster(winCard);
     if (partnerSafe) {
       const pts = byHighAug(legal.filter(c => aug(c) > 0 && !info(c).trump));
       if (pts.length) return pts[0];
@@ -420,6 +458,17 @@ function nullPlay(p, legal, trick, declarer, info, str) {
   const isDecl = p === declarer;
   const byLow = a => a.slice().sort((x, y) => str(x) - str(y));
   const byHigh = a => a.slice().sort((x, y) => str(y) - str(x));
+  // Null Ouvert: die offene Hand verrät, womit man den Alleinspieler in einen
+  // Stich zwingt – eine Farbe, in der er bedienen muss und nur höhere Karten hat.
+  const offen = (!isDecl && state.revealed.includes(declarer)) ? state.players[declarer].hand : null;
+  if (trick.length === 0 && offen && offen.length) {
+    const zwang = legal.filter(c => {
+      const seine = offen.filter(x => x.s === c.s);
+      return seine.length > 0 && seine.every(x => str(x) > str(c));
+    });
+    // die höchste solche Karte: sicher zu hoch für ihn, aber schwer zu überspielen
+    if (zwang.length) return byHigh(zwang)[0];
+  }
   if (trick.length === 0) return byLow(legal)[0];          // niedrig anspielen
   const led = info(trick[0].card).suit;
   const curBest = Math.max(...trick.filter(t => info(t.card).suit === led).map(t => str(t.card)), -1);
@@ -769,6 +818,10 @@ async function humanDeclare() {
   const g = await humanChooseGame(pl.hand, isHand);
   g.hand = isHand;
   state.game = g;
+  // Ouvert heißt offen: die Karten des Alleinspielers liegen für alle sichtbar.
+  // Das galt bisher nur für die KI – der Mensch bekam den höheren Spielwert,
+  // ohne die Karten herzuzeigen.
+  if (g.ouvert) state.revealed = [0];
   if (choice === 'take') showSkatTaken();
 }
 
@@ -896,6 +949,71 @@ function humanPlay(legal) {
 }
 
 // ---------------- Wertung ----------------
+
+// Reine Spielwert-Rechnung: kennt weder DOM noch state und ist damit direkt
+// testbar (tests/wertung.test.js).
+//   spiel     {type:'suit'|'grand'|'null', trump, hand, ouvert}
+//   augen     Augen des Alleinspielers (inkl. Skat)
+//   stiche    Stiche des Alleinspielers
+//   matadore  Spitzen aus seinen 12 Karten
+//   reizwert  bis wohin er gereizt hat
+//
+// Regelentscheidungen (siehe CODEREVIEW.md B2-B4):
+//  * Schneider/Schwarz zählen in beide Richtungen: 90+ Augen bzw. alle Stiche
+//    für den Alleinspieler, 30- Augen bzw. kein Stich gegen ihn.
+//  * Grand Ouvert ist immer Hand und immer Schneider und Schwarz angesagt,
+//    der Faktor steht daher fest bei Spitzen + 7.
+//  * Überreizt wird an dem Spielwert gemessen, den der Alleinspieler selbst
+//    erreicht – Stufen, die ihm die Gegner aufzwingen, heilen kein Gebot.
+function bewerteSpiel({ spiel, augen, stiche, matadore, reizwert }) {
+  if (spiel.type === 'null') {
+    const wert = spiel.hand ? (spiel.ouvert ? 59 : 35) : (spiel.ouvert ? 46 : 23);
+    const ueberreizt = wert < reizwert;
+    return {
+      gewonnen: stiche === 0 && !ueberreizt, wert, grund: wert, stufen: 1, ueberreizt,
+      schneiderFuer: false, schwarzFuer: false, schneiderGegen: false, schwarzGegen: false
+    };
+  }
+
+  const grund = spiel.type === 'grand' ? GRUNDWERT.grand : GRUNDWERT[spiel.trump];
+  const grandOuvert = spiel.type === 'grand' && !!spiel.ouvert;
+  const schneiderFuer = augen >= 90;      // Alleinspieler macht Schneider
+  const schwarzFuer = stiche === 10;      // … und schwarz
+  const schneiderGegen = augen <= 30;     // Alleinspieler wird Schneider gespielt
+  const schwarzGegen = stiche === 0;      // … und schwarz
+
+  // Stufen, die der Alleinspieler selbst vorweisen kann
+  let eigen = matadore + 1 + (spiel.hand ? 1 : 0);
+  if (grandOuvert) {
+    // Schneider + Schneider angesagt + Schwarz + Schwarz angesagt + Ouvert
+    eigen += 5;
+  } else {
+    if (schneiderFuer) eigen += 1;
+    if (schwarzFuer) eigen += 1;
+  }
+  const ueberreizt = grund * eigen < reizwert;
+
+  // Stufen, die die Gegner erzwungen haben (beim Grand Ouvert schon enthalten)
+  let stufen = eigen;
+  if (!grandOuvert) {
+    if (schneiderGegen) stufen += 1;
+    if (schwarzGegen) stufen += 1;
+  }
+  let wert = grund * stufen;
+
+  // Grand Ouvert verlangt alle Stiche, sonst reichen 61 Augen
+  const geschafft = grandOuvert ? schwarzFuer : augen >= 61;
+  const gewonnen = geschafft && !ueberreizt;
+
+  // Überreizt: mindestens auf das nächste Vielfache des Grundwerts ≥ Reizwert
+  if (ueberreizt) {
+    let lv = grund;
+    while (lv < reizwert) lv += grund;
+    wert = Math.max(wert, lv);
+  }
+  return { gewonnen, wert, grund, stufen, ueberreizt, schneiderFuer, schwarzFuer, schneiderGegen, schwarzGegen };
+}
+
 async function scoreRound() {
   const d = state.declarer, g = state.game;
   const declPl = state.players[d];
@@ -904,43 +1022,31 @@ async function scoreRound() {
     + state.skat.reduce((s, c) => s + AUGEN[c.r], 0);
   const declTricks = declPl.tricks;
 
-  let won, value, title, detail = '';
-  let schneider = false, schwarz = false;
+  const mat = g.type === 'null' ? 0 : countMatadors(state.declarerTwelve, g);
+  const w = bewerteSpiel({
+    spiel: g, augen: declAugen, stiche: declTricks,
+    matadore: mat, reizwert: state.reizwert
+  });
+  const won = w.gewonnen, value = w.wert;
+  let title, detail;
 
   if (g.type === 'null') {
-    won = declTricks === 0;
-    value = g.hand ? (g.ouvert ? 59 : 35) : (g.ouvert ? 46 : 23);
     title = won ? 'Null gewonnen!' : 'Null verloren';
-    detail = won ? 'Kein Stich kassiert.' : `${declTricks} Stich(e) kassiert.`;
+    detail = (declTricks === 0 ? 'Kein Stich kassiert.' : `${declTricks} Stich(e) kassiert.`)
+      + ` · Spielwert ${value}`
+      + (w.ueberreizt ? ` · überreizt (bis ${state.reizwert})` : '');
   } else {
-    const mat = countMatadors(state.declarerTwelve, g);
-    schneider = declAugen >= 90;
-    schwarz = declTricks === 10;
-    let factor = mat + 1 + (g.hand ? 1 : 0);
-    if (schneider) factor += 1;
-    if (schwarz) factor += 1;
-    if (g.ouvert) factor += 1;                     // Ouvert (Grand Ouvert)
-    const grund = g.type === 'grand' ? 24 : GRUNDWERT[g.trump];
-    value = grund * factor;
-
-    // Gewinnbedingung: Grand Ouvert braucht ALLE Stiche (Schwarz), sonst >= 61 Augen
-    const madePoints = g.ouvert ? schwarz : declAugen >= 61;
-    const overbid = value < state.reizwert;
-    won = madePoints && !overbid;
-
-    const spitz = (mat > 0 ? (mat + ' ' + (isMit(state.declarerTwelve, g) ? 'mit' : 'ohne')) : 'ohne');
-    title = won ? (g.ouvert ? 'Grand Ouvert gewonnen!' : 'Gewonnen!') : 'Verloren';
+    const spitz = (mat > 0 ? (mat + ' ' + (isMit(state.declarerTwelve) ? 'mit' : 'ohne')) : 'ohne');
+    const grandOuvert = g.type === 'grand' && g.ouvert;
+    title = won ? (grandOuvert ? 'Grand Ouvert gewonnen!' : 'Gewonnen!') : 'Verloren';
     detail = `${declAugen} Augen · ${spitz} · Spielwert ${value}`
       + (g.ouvert ? ' · Ouvert' : '')
-      + (schneider && !g.ouvert ? ' · Schneider' : '')
-      + (schwarz ? ' · Schwarz' : '')
-      + (overbid ? ` · überreizt (bis ${state.reizwert})` : '');
-    if (overbid) {
-      // Verlustwert auf nächstes Grundwert-Vielfaches ≥ Reizwert anheben
-      let lv = grund;
-      while (lv < state.reizwert) lv += grund;
-      value = lv;
-    }
+      + (grandOuvert ? ' · Schneider und Schwarz angesagt'
+        : (w.schneiderFuer ? ' · Schneider' : '')
+        + (w.schwarzFuer ? ' · Schwarz' : '')
+        + (w.schneiderGegen ? ' · Schneider gegen den Alleinspieler' : '')
+        + (w.schwarzGegen ? ' · schwarz gegen den Alleinspieler' : ''))
+      + (w.ueberreizt ? ` · überreizt (bis ${state.reizwert})` : '');
   }
 
   const delta = won ? value : -2 * value;
@@ -950,7 +1056,9 @@ async function scoreRound() {
   state.logs.push(`${title} ${P_NAMES[d]}: ${delta > 0 ? '+' : ''}${delta}`);
   const deltas = [0, 0, 0]; deltas[d] = delta;
   state.history.push({ round: state.round, dealer: state.dealer, label: g.label, deltas });
-  recordDeclarerStat(d, won, schneider, schwarz);
+  // In die Statistik gehört nur, was der Alleinspieler selbst geschafft hat –
+  // nicht, wenn er schneider gespielt wurde.
+  recordDeclarerStat(d, won, w.schneiderFuer, w.schwarzFuer);
   renderScore();
   showResult(title, won, detail + `<br>${P_NAMES[d]}: <b>${delta > 0 ? '+' : ''}${delta}</b>`);
   await wait(200);
@@ -997,9 +1105,11 @@ async function scoreRamsch() {
   await wait(200);
 }
 
-function isMit(cards, game) {
-  const ids = new Set(cards.map(cardId));
-  return ids.has('EU');
+// "mit" oder "ohne" Spitzen? Hängt allein am Eichel-Unter, dem höchsten Trumpf –
+// und zwar bei Farbspiel wie bei Grand gleichermaßen. Deshalb braucht die
+// Funktion das Spiel nicht zu kennen (Null-Spiele haben keine Spitzen).
+function isMit(cards) {
+  return cards.some(c => cardId(c) === 'EU');
 }
 
 // ============================ RENDERING ============================
@@ -1139,7 +1249,9 @@ function renderSeatInfo() {
     seat.querySelector('.pname').textContent = state.players[i].name;
     const tag = seat.querySelector('.ptag');
     tag.className = 'ptag';
-    if (state.declarer === i) { tag.textContent = 'Alleinspieler'; tag.classList.add('decl'); }
+    // Ouvert sichtbar machen – auch beim Menschen, dessen Karten ohnehin offen liegen
+    const offen = state.revealed.includes(i) ? ' · offen' : '';
+    if (state.declarer === i) { tag.textContent = 'Alleinspieler' + offen; tag.classList.add('decl'); }
     else if (state.declarer === null && vorhand() === i) { tag.textContent = 'Vorhand'; tag.classList.add('vh'); }
     else if (state.declarer !== null) { tag.textContent = 'Gegenspieler'; }
     else tag.textContent = ['Vorhand', 'Mittelhand', 'Hinterhand'][(i - vorhand() + 3) % 3];
@@ -1284,6 +1396,16 @@ document.getElementById('menuBtn').onclick = () => {
   document.getElementById('log').classList.remove('hidden');
 };
 document.getElementById('logClose').onclick = () => document.getElementById('log').classList.add('hidden');
+
+// ---------------- Testzugang ----------------
+// Der Selbstspiel-Prüfstand (tests/selbstspiel.html) steuert die echte Seite im
+// iframe. Auf `let`-Bindungen kommt er von außen nicht heran (sie hängen nicht
+// am window), deshalb dieser schmale, ausdrücklich benannte Zugang.
+window.SkatTest = {
+  get state() { return state; },
+  tempo(f) { waitFactor = f; },     // 0 = ohne Pausen durchlaufen
+  neustart() { startGame(); }
+};
 
 // ---------------- Start ----------------
 if ('serviceWorker' in navigator) {

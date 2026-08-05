@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Skat – Selbstspiel-Prüfstand</title>
+<style>
+  body { background:#0d1117; color:#c9d1d9; font:14px/1.5 ui-monospace, Consolas, monospace; padding:16px; }
+  h1 { font-size:16px; }
+  #kopf { font-weight:bold; margin-bottom:8px; }
+  pre { white-space:pre-wrap; }
+  .ok { color:#3fb950; }
+  .fehl { color:#f85149; }
+  iframe { width:820px; height:620px; border:1px solid #30363d; margin-top:12px; }
+</style>
+</head>
+<body>
+<h1>Skat – Selbstspiel-Prüfstand</h1>
+<div id="kopf">läuft …</div>
+<pre id="ausgabe"></pre>
+<iframe id="app" src="../index.html"></iframe>
+
+<!-- Ein registrierter Service Worker liefert sonst alten Code aus. -->
+<script>
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    (async () => {
+      for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+      for (const k of await caches.keys()) await caches.delete(k);
+      location.reload();
+    })();
+  }
+</script>
+
+<script>
+/* Spielt die echte index.html im iframe automatisch durch: klickt Knöpfe und
+   Karten wie ein Mensch, nur ohne Pausen (waitFactor = 0). Zweck ist kein
+   Regeltest – dafür gibt es test.html – sondern ein Rauchtest über den
+   kompletten Ablauf: keine Ausnahme, keine Konsolenmeldung, jede Runde endet
+   mit einer Wertung. Genau das Netz, das ein Umbau der Dateien braucht.
+
+   Aufruf:  selbstspiel.html?runden=30&seed=7                              */
+
+const P = new URLSearchParams(location.search);
+const RUNDEN = Number(P.get('runden') || 20);
+const SEED = Number(P.get('seed') || 20260805);
+const ZEITLIMIT = Number(P.get('limit') || 60000);
+
+const kopf = document.getElementById('kopf');
+const ausgabe = document.getElementById('ausgabe');
+const rahmen = document.getElementById('app');
+const meldungen = [];
+const fehler = [];
+
+function melde(text, schlimm) {
+  (schlimm ? fehler : meldungen).push(text);
+  const span = document.createElement('span');
+  span.className = schlimm ? 'fehl' : '';
+  span.textContent = text + '\n';
+  ausgabe.appendChild(span);
+}
+
+// eigener Zufall, damit ein Lauf mit gleichem Seed reproduzierbar ist
+let zustand = SEED >>> 0;
+function zufall() {
+  zustand = (zustand * 1664525 + 1013904223) >>> 0;
+  return zustand / 4294967296;
+}
+
+function tippe(el) {
+  const r = el.getBoundingClientRect();
+  const opt = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 1 };
+  el.dispatchEvent(new PointerEvent('pointerdown', opt));
+  el.dispatchEvent(new PointerEvent('pointerup', opt));
+}
+
+rahmen.addEventListener('load', () => {
+  const w = rahmen.contentWindow, d = rahmen.contentDocument;
+
+  w.onerror = (m, q, z) => melde(`Ausnahme: ${m} (${q}:${z})`, true);
+  w.addEventListener('unhandledrejection', e => melde('Offenes Promise: ' + e.reason, true));
+  const alteFehlermeldung = w.console.error;
+  w.console.error = (...a) => { melde('console.error: ' + a.join(' '), true); alteFehlermeldung.apply(w.console, a); };
+
+  const zugang = w.SkatTest;   // let-Bindungen der App liegen nicht am window
+  if (!zugang) { melde('window.SkatTest fehlt – Testzugang in app.js prüfen', true); return fertig(null); }
+  zugang.tempo(0);             // ohne Pausen durchlaufen
+  w.Math.random = zufall;      // reproduzierbares Geben
+  zugang.neustart();           // mit gesetztem Zufall neu geben
+
+  let letzteRunde = 0, leerlauf = 0;
+  const start = Date.now();
+
+  const takt = setInterval(() => {
+    if (Date.now() - start > ZEITLIMIT) return fertig('Zeitlimit erreicht');
+    const runde = zugang.state ? zugang.state.round : 0;
+    if (runde !== letzteRunde) { letzteRunde = runde; leerlauf = 0; }
+    if (runde > RUNDEN) return fertig(null);
+
+    const knopf = [...d.querySelectorAll('#actions button')];
+    const karten = [...d.querySelectorAll('#myhand .card.playable')];
+
+    if (knopf.length && karten.length) {
+      // Drücken: erst genau zwei Karten wählen, dann bestätigen
+      const gewaehlt = d.querySelectorAll('#myhand .card.sel').length;
+      if (gewaehlt < 2) { tippe(karten.find(k => !k.classList.contains('sel')) || karten[0]); return; }
+      knopf[0].click(); return;
+    }
+    if (knopf.length) { knopf[Math.floor(zufall() * knopf.length)].click(); leerlauf = 0; return; }
+    if (karten.length) { tippe(karten[Math.floor(zufall() * karten.length)]); leerlauf = 0; return; }
+
+    if (++leerlauf > 400) return fertig('Ablauf hängt (nichts anklickbar)');
+  }, 0);
+
+  function fertig(grund) {
+    clearInterval(takt);
+    if (grund) melde(grund, true);
+    const s = w.SkatTest && w.SkatTest.state;
+    const runden = s ? s.history.length : 0;
+    melde(`Runden gewertet: ${runden}`);
+    if (s) {
+      const arten = {};
+      s.history.forEach(h => arten[h.label] = (arten[h.label] || 0) + 1);
+      melde('Spielarten: ' + Object.entries(arten).map(([k, v]) => `${k} ${v}`).join(' · '));
+      melde('Punkte: ' + s.scores.map((p, i) => `${s.players[i].name} ${p}`).join(' · '));
+      // Jede gewertete Runde muss genau einen Eintrag mit Punktveränderung haben
+      const leer = s.history.filter(h => h.deltas.every(x => x === 0)).length;
+      if (leer) melde(`${leer} Runde(n) ohne Punktveränderung`, true);
+      if (runden < RUNDEN) melde(`nur ${runden} von ${RUNDEN} Runden gespielt`, true);
+    }
+    kopf.textContent = fehler.length === 0
+      ? `Selbstspiel ohne Beanstandung (${runden} Runden, Seed ${SEED})`
+      : `${fehler.length} Beanstandung(en)`;
+    kopf.className = fehler.length === 0 ? 'ok' : 'fehl';
+    window.__SELBSTSPIEL = { runden, fehler, meldungen };
+  }
+}, { once: true });
+</script>
+</body>
+</html>

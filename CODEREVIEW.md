@@ -129,7 +129,15 @@ h.splice(k, 1);
 
 ## B. Regelabweichungen
 
-### B1. Ouvert des Spielers legt die Karten nicht offen
+### B1. Ouvert des Spielers legt die Karten nicht offen — ✅ erledigt 05.08.2026
+
+> **Behoben.** `humanDeclare()` setzt nach der Spielansage `state.revealed = [0]`,
+> wenn Ouvert gewählt wurde — genau wie `aiDeclare` es beim Grand Ouvert längst
+> tat. `renderSeatInfo` hängt an den Sitz des Alleinspielers ein „· offen", damit
+> der Zustand sichtbar ist. Damit ist der Vorteil weg: bisher bekam der Mensch
+> beim Null Ouvert den Spielwert 46 statt 23 (und beim Grand Ouvert den Faktor
+> Ouvert), ohne die Karten herzuzeigen. Die KI nutzt die Information jetzt
+> tatsächlich, siehe C2.
 
 **Wo:** `humanChooseGame` (`:741-775`) setzt `ouvert: true`, aber
 `state.revealed` wird nur in `aiDeclare` (`:654`) befüllt.
@@ -146,7 +154,22 @@ Und in `renderMyHand`/`renderOpps` sicherstellen, dass ein Hinweis erscheint
 ("Deine Karten liegen offen"). Ob die KI die Information tatsächlich nutzt, ist
 eine zweite Frage — siehe C2.
 
-### B2. Schneider gegen den Alleinspieler wird nicht gewertet
+### B2. Schneider gegen den Alleinspieler wird nicht gewertet — ✅ erledigt 05.08.2026
+
+> **Behoben.** Die Wertung steckt jetzt in der reinen Funktion `bewerteSpiel()`
+> (kein DOM, kein `state`), die Schneider und Schwarz **in beide Richtungen**
+> zählt: `augen >= 90` bzw. alle Stiche für den Alleinspieler, `augen <= 30`
+> bzw. kein Stich gegen ihn. `recordDeclarerStat` bekommt nur noch die selbst
+> erzielten Stufen, die Statistik meldet also kein „Schneider" mehr, wenn der
+> Alleinspieler schneider **wurde**; der Ergebnistext unterscheidet beides.
+> **Gegenprobe** (Eichel-Spiel, mit 2, Skat aufgenommen):
+>
+> | Fall | vorher | nachher |
+> |---|---|---|
+> | verloren mit 25 Augen | Stufe 3 → −72 | Stufe 4 → **−96** |
+> | verloren ohne Stich | Stufe 3 → −72 | Stufe 5 → **−120** |
+>
+> Tests: `tests/wertung.test.js › Schneider und Schwarz`.
 
 **Wo:** `scoreRound()` (`:854-856`)
 
@@ -172,7 +195,14 @@ if (schwarz || schwarzGegen) factor += 1;
 meldet, wenn der Alleinspieler schneider **wurde**. Im Ergebnistext
 (`detail`, `:870-874`) sauber unterscheiden.
 
-### B3. Überreizen bei Null nicht geprüft
+### B3. Überreizen bei Null nicht geprüft — ✅ erledigt 05.08.2026
+
+> **Behoben.** Der Null-Zweig in `bewerteSpiel()` prüft `wert < reizwert`; ist
+> das der Fall, ist das Spiel verloren, auch ohne einen einzigen Stich. Der
+> Verlustwert bleibt bei Null der Spielwert selbst (23/35/46/59), verdoppelt.
+> **Gegenprobe:** Null angesagt nach Reizen bis 24 — vorher **+23** (Sieg),
+> jetzt **−46**; eine Differenz von 69 Punkten pro Fall.
+> Tests: `tests/wertung.test.js › Null`.
 
 **Wo:** `scoreRound()` (`:847-851`)
 
@@ -187,7 +217,22 @@ won = (declTricks === 0) && !overbid;
 Der Verlustwert bleibt bei Null der Spielwert selbst (23/35/46/59), verdoppelt.
 Im `detail`-Text den Überreiz kenntlich machen, wie im Farbspiel-Zweig.
 
-### B4. Grand Ouvert: Faktor zu niedrig
+### B4. Grand Ouvert: Faktor zu niedrig — ✅ erledigt 05.08.2026
+
+> **Behoben, und zwar korrekt gerechnet statt als Hausregel erklärt.** Grand
+> Ouvert ist zwingend Handspiel und schließt Schneider und Schwarz **angesagt**
+> ein; der Faktor steht damit fest bei `Spitzen + 7` (mit/ohne + Spiel + Hand +
+> Schneider + Schneider angesagt + Schwarz + Schwarz angesagt + Ouvert).
+> **Gegenprobe:** Grand Ouvert „mit 4" — vorher 24 × 9 = **216**, jetzt
+> 24 × 11 = **264**.
+>
+> **Entscheidung bei einer mehrdeutigen Stelle:** Die angesagten Stufen zählen
+> auch im **verlorenen** Spiel mit, der Faktor bleibt also bei `Spitzen + 7`,
+> obwohl Schneider und Schwarz dann tatsächlich nicht erreicht wurden. Sonst
+> wäre ein verlorenes Grand Ouvert billiger als ein verlorener schlichter Grand
+> Hand mit gleichen Spitzen — und die Ansage bliebe folgenlos. Ein verlorenes
+> Grand Ouvert „mit 4" kostet damit −528.
+> Tests: `tests/wertung.test.js › Grand Ouvert`.
 
 **Wo:** `scoreRound()` (`:856-861`)
 
@@ -202,7 +247,13 @@ gewollt ist — sie in der Ergebnisanzeige und im README ausdrücklich als
 Hausregel benennen. Beides ist vertretbar, der aktuelle Zustand (stillschweigend
 falsch) nicht.
 
-### B5. `cardInfo` kennt den Ramsch-Typ nicht
+### B5. `cardInfo` kennt den Ramsch-Typ nicht — ✅ erledigt 05.08.2026
+
+> **Behoben.** `cardInfo` behandelt `grand` und `ramsch` jetzt in einem eigenen,
+> ausdrücklichen Zweig (nur die vier Unter sind Trumpf); das Farbspiel steht
+> darunter für sich. Verhalten unverändert — das war der Punkt: bisher ergab es
+> sich nur zufällig daraus, dass `game.trump === null` den Farbvergleich
+> scheitern ließ. Tests: `tests/regeln.test.js › Ramsch wird wie Grand gespielt`.
 
 **Wo:** `cardInfo` (`:110-116`)
 
@@ -224,7 +275,11 @@ Ramsch stillschweigend kaputt macht.
 
 ## C. KI und Spielgefühl
 
-### C1. `isMit` ignoriert das übergebene Spiel
+### C1. `isMit` ignoriert das übergebene Spiel — ✅ erledigt 05.08.2026
+
+> **Behoben.** Parameter entfernt (`isMit(cards)`) und im Kommentar begründet:
+> „mit" oder „ohne" hängt bei Farbspiel wie bei Grand allein am Eichel-Unter,
+> Null-Spiele haben keine Spitzen. Beide Aufrufstellen angepasst.
 
 **Wo:** `:937-940`
 
@@ -242,7 +297,29 @@ nicht stattfindet.
 **Anweisung:** Parameter entfernen oder einen Kommentar setzen, warum er nicht
 gebraucht wird.
 
-### C2. Ouvert-Karten fließen nicht ins Kartenzählen der KI
+### C2. Ouvert-Karten fließen nicht ins Kartenzählen der KI — ✅ erledigt 05.08.2026
+
+> **Behoben — aber anders als in der Anweisung vorgeschlagen.** Die offenen
+> Karten **aus `unseen` zu entfernen** wäre falsch gewesen: `unseen` ist die
+> Gefahrenmenge, aus der `isMaster`/`higherUnseen` ablesen, ob eine Karte noch
+> geschlagen werden kann. Läge der Eichel-Unter offen beim Alleinspieler und
+> würde aus `unseen` gestrichen, hielte die KI ihren Grün-Unter für die höchste
+> lebende Karte — die Ouvert-Information hätte sie schlechter spielen lassen.
+>
+> Stattdessen bleibt `unseen` unverändert und es kommt Wissen **hinzu**:
+> `kannSchlagen(gegner, karte, farbe)` liest die offene Hand direkt aus und
+> beantwortet unter Bedienzwang exakt, ob ein bestimmter Gegner schlagen kann;
+> `exaktSicher(...)` liefert `null`, sobald auch nur eine beteiligte Hand
+> verdeckt ist, und dann greift wie bisher die Heuristik. Genutzt in `safeCash`
+> (Ass gefahrlos anspielen), `safeWin` (hält mein Stich?) und beim Schmieren auf
+> den Partner. Bei verdeckten Händen ist das Verhalten damit **unverändert**;
+> nur in Ouvert-Runden ändert sich etwas.
+>
+> Zusätzlich für **Null Ouvert**, wo die Information am meisten wert ist:
+> `nullPlay` sucht als Verteidiger beim Ausspiel eine Farbe, in der der
+> Alleinspieler bedienen muss und ausschließlich höhere Karten hält — und spielt
+> davon die höchste, damit der Partner nicht versehentlich überspielt. Vorher
+> spielte die Verteidigung gegen ein offenes Null blind die niedrigste Karte.
 
 **Wo:** `aiPlay` (`:249-254`) baut `unseen` aus `tracker.played`, eigener Hand
 und (beim Alleinspieler) dem Skat.

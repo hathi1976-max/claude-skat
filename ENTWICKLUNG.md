@@ -95,3 +95,49 @@ ablehnt, greift der Ramsch-Zweig.
 
 Bei der Voreinstellung ging also **jede zehnte Runde** zu Unrecht in den Ramsch.
 Der Pfad selbst ist später durch `tests/ablauf.test.js` abgedeckt.
+
+## 05.08.2026 — Regelabweichungen (Abschnitt B) und KI (C1/C2)
+
+**Geändert:**
+
+1. **Wertung als reine Funktion.** `bewerteSpiel({spiel, augen, stiche,
+   matadore, reizwert})` rechnet den Spielwert ohne DOM und ohne `state` und ist
+   damit prüfbar. `scoreRound()` ist nur noch Anzeige drumherum. Inhaltlich drei
+   Korrekturen:
+   - **Schneider und Schwarz zählen in beide Richtungen** (B2). Wird der
+     Alleinspieler mit ≤ 30 Augen oder ohne Stich abgefertigt, steigt der
+     Spielwert und damit sein Verlust.
+   - **Überreizen bei Null** (B3) wird geprüft: Null (23) nach einem Gebot von
+     24 ist verloren, nicht gewonnen.
+   - **Grand Ouvert** (B4) rechnet mit `Spitzen + 7`, weil Hand, Schneider,
+     Schneider angesagt, Schwarz, Schwarz angesagt und Ouvert alle enthalten
+     sind.
+2. **Ouvert legt jetzt auch beim Menschen offen** (B1): `humanDeclare` setzt
+   `state.revealed`, der Sitz zeigt „· offen".
+3. **Die KI nutzt offene Karten** (C2) über `kannSchlagen`/`exaktSicher` — sie
+   *ergänzen* das Kartenzählen, statt (wie ursprünglich vorgeschlagen) die
+   offenen Karten aus der Gefahrenmenge zu streichen; letzteres hätte die KI
+   schlechter spielen lassen. Gegen Null Ouvert sucht die Verteidigung eine
+   Farbe, in der der Alleinspieler den Stich nehmen muss.
+4. `cardInfo` nennt Ramsch ausdrücklich (B5), `isMit` verliert den ungenutzten
+   Parameter (C1).
+
+**Geprüft:**
+
+- **Selbstspiel-Prüfstand** neu gebaut: `tests/selbstspiel.html` lädt die echte
+  `index.html` in einem iframe, setzt das Tempo auf 0 und klickt Knöpfe und
+  Karten wie ein Mensch. 200 Runden mit festem Zufalls-Seed liefen ohne
+  Ausnahme, ohne `console.error` und ohne Runde ohne Wertung; abgedeckt waren
+  alle Spielarten inklusive Grand Ouvert, Null Ouvert, Hand und Ramsch. Der
+  Prüfstand braucht `window.SkatTest` in `app.js`, weil `let`-Bindungen nicht
+  am `window` hängen.
+- **Wertung gegengerechnet** (Eichel-Spiel, mit 2, Skat aufgenommen):
+
+  | Fall | vorher | nachher |
+  |---|---|---|
+  | verloren mit 25 Augen | −72 | **−96** |
+  | verloren ohne Stich | −72 | **−120** |
+  | Null (23) nach Gebot 24 | **+23** | **−46** |
+  | Grand Ouvert mit 4, gewonnen | +216 | **+264** |
+  | Grand Ouvert mit 4, verloren | −432 | **−528** |
+  | Schellen ohne 1 (18) nach Gebot 20 | −54 | −54 (unverändert) |
