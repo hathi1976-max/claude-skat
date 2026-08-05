@@ -402,7 +402,24 @@ Runner in `tests.html` — kein Build-Schritt nötig). Mindestabdeckung:
 - `legalMoves`: Bedienzwang, Trumpf-Bedienzwang bei Unter
 - `scoreRound`: alle Fälle aus B2/B3/B4 als Regressionstests
 
-### D3. Versionsnummer doppelt gepflegt
+### D3. Versionsnummer doppelt gepflegt — ✅ erledigt 05.08.2026
+
+> **Behoben.** Neue Datei `version.js` mit einer einzigen Zeile
+> (`self.APP_VERSION = 'v10';`) ist jetzt die einzige Stelle. `sw.js` lädt sie
+> per `importScripts('./version.js')` und bildet daraus
+> `CACHE = 'skat-' + self.APP_VERSION`; `index.html` bindet sie vor `app.js`
+> ein, und das Menü zeigt die Version unten an. `self.` statt `const`, weil der
+> Wert im Fenster **und** im Service Worker sichtbar sein muss — eine `const` auf
+> oberster Ebene eines klassischen Skripts hängt an keinem der beiden globalen
+> Objekte (dieselbe Falle wie bei `window.SkatTest`).
+>
+> **Nebeneffekt, der hier gerade recht kommt:** Chrome vergleicht bei der
+> Update-Prüfung des Service Workers auch importierte Skripte. Eine Änderung an
+> `version.js` löst die Neuinstallation also aus, obwohl `sw.js` selbst
+> unverändert bleibt. Version für diese Sitzung von `v9` auf **`v10`** gezogen,
+> README-Absatz ergänzt. Das Node-Skript aus `package.json` (Alternative in der
+> Anweisung) scheidet aus: kein Node auf dem Rechner, und die App soll ohne
+> Build-Schritt auslieferbar bleiben.
 
 `sw.js:1` (`skat-v9`) und die Anzeige in `index.html`. Bei jedem Release müssen
 beide angefasst werden; wird eins vergessen, serviert der Service Worker alten
@@ -420,19 +437,36 @@ Node-Skript, das beide aus `package.json` generiert.
 - `deal()` (`:483`) benutzt `Math.random`. Für ein Kartenspiel völlig in Ordnung;
   falls später Statistik-Auswertungen ernst genommen werden sollen, ist
   `crypto.getRandomValues` die bessere Quelle. Niedrige Priorität.
+  ⏭️ **bewusst nicht umgesetzt 05.08.2026** — `Math.random` bleibt, und zwar aus
+  einem konkreten Grund: der Selbstspiel-Prüfstand (`tests/selbstspiel.html`)
+  ersetzt `Math.random` im iframe durch einen gesäten Generator und kann so
+  jeden Lauf exakt wiederholen. Mit `crypto.getRandomValues` wäre das Geben
+  nicht mehr reproduzierbar, und dem Kartenspiel selbst bringt die bessere
+  Quelle nichts. Falls doch einmal Statistik über echte Partien geführt wird:
+  hier wieder aufmachen.
 - `state.logs` (`:496` u. a.) wächst über die gesamte Match-Dauer unbegrenzt;
   angezeigt werden nur die letzten 30 (`:1199`). Auf die letzten 200 kappen.
+  ✅ **erledigt 05.08.2026** — alle 13 `state.logs.push(...)` gehen jetzt durch
+  `logge(text)`, das auf `LOG_MAX = 200` kappt.
 - `bubble()`/`prompt()` (`:1101-1102`) schreiben per `innerHTML`. Alle Inhalte
   sind heute projekteigene Konstanten, also ungefährlich — aber sobald ein frei
   wählbarer Spielername dazukommt, wird das zur Lücke. Beim Einbau von Namen
   daran denken.
+  ⏭️ **bewusst offen** — es gibt weiterhin keine frei wählbaren Namen; `P_NAMES`
+  ist eine Konstante. Der Hinweis bleibt als Merkposten für den Tag, an dem
+  Namen eingebaut werden.
 - `attachDragReorder` (`:994`) registriert vier Pointer-Listener pro Karte bei
   jedem `renderMyHand`. Da die Elemente jedes Mal neu erzeugt werden, entsteht
   kein Leck — bei 10 Karten × häufigem Rendern trotzdem unnötige Arbeit. Optional
   auf einen delegierten Listener am `#myhand`-Container umstellen.
+  ⏭️ **bewusst offen** — reine Mikro-Optimierung ohne messbaren Nutzen (10 Karten),
+  aber mit echtem Risiko: Ziehen und Tippen hängen an `setPointerCapture` je
+  Element, ein delegierter Listener müsste die Zuordnung selbst führen. Das
+  gehört im Browser mit Maus **und** Finger nachgeprüft; in dieser Sitzung waren
+  die Browser-Werkzeuge nicht verfügbar.
 - `prompt` als Funktionsname überschattet das globale `window.prompt`. Funktioniert,
   ist aber verwirrend — in `zeigeHinweis` umbenennen.
-  ✅ erledigt 04.08.2026 — durchgängig in `zeigeHinweis` umbenannt.
+  ✅ **erledigt 04.08.2026** — durchgängig in `zeigeHinweis` umbenannt.
 
 ---
 

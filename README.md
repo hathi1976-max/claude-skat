@@ -16,6 +16,13 @@ py -m http.server 8199 --directory .
 Dann `http://localhost:8199` aufrufen. Über „Zum Startbildschirm hinzufügen"
 lässt sich die App installieren und offline nutzen.
 
+## Version und Service Worker
+Die Versionsnummer steht **nur** in `version.js`. Von dort holt sie sich sowohl
+die Anzeige im Menü (☰, ganz unten) als auch der Service Worker für seinen
+Cache-Namen. **Vor jedem Push in `version.js` hochzählen** – sonst liefert der
+Service Worker installierten Apps weiter den alten Code. Ob die neue Fassung
+wirklich läuft, verrät die Versionszeile im Menü.
+
 ## Was ist umgesetzt
 - **Reizen** zwischen Vorhand / Mittelhand / Hinterhand mit klickbaren Geboten;
   KI-gegen-KI-Auktionen laufen sichtbar ab (jede Zahl und jedes Ja/Passe wird angezeigt).

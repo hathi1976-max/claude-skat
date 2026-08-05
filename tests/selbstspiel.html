@@ -125,7 +125,16 @@ rahmen.addEventListener('load', () => {
       const leer = s.history.filter(h => h.deltas.every(x => x === 0)).length;
       if (leer) melde(`${leer} Runde(n) ohne Punktveränderung`, true);
       if (runden < RUNDEN) melde(`nur ${runden} von ${RUNDEN} Runden gespielt`, true);
+      // Log wird gekappt (Befund E)
+      if (s.logs.length > 200) melde(`Spielverlauf nicht gekappt: ${s.logs.length} Zeilen`, true);
+      else melde(`Spielverlauf: ${s.logs.length} Zeilen (Grenze 200)`);
     }
+    // Versionsanzeige im Menü (Befund D3)
+    try {
+      d.getElementById('menuBtn').click();
+      const treffer = d.getElementById('logInner').textContent.match(/Version\s+(\S+)/);
+      melde('Menü meldet Version: ' + (treffer ? treffer[1] : 'FEHLT'), !treffer || treffer[1] === '?');
+    } catch (e) { melde('Menü nicht lesbar: ' + e.message, true); }
     kopf.textContent = fehler.length === 0
       ? `Selbstspiel ohne Beanstandung (${runden} Runden, Seed ${SEED})`
       : `${fehler.length} Beanstandung(en)`;

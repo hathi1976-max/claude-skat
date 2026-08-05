@@ -141,3 +141,25 @@ Der Pfad selbst ist später durch `tests/ablauf.test.js` abgedeckt.
   | Grand Ouvert mit 4, gewonnen | +216 | **+264** |
   | Grand Ouvert mit 4, verloren | −432 | **−528** |
   | Schellen ohne 1 (18) nach Gebot 20 | −54 | −54 (unverändert) |
+
+## 05.08.2026 — Versionsnummer an einer Stelle (D3) und Kleinigkeiten (E)
+
+**Geändert:**
+
+- Neue Datei `version.js` (`self.APP_VERSION = 'v10';`) ist die einzige Stelle
+  für die Version. `sw.js` holt sie sich per `importScripts` und baut daraus
+  seinen Cache-Namen, `index.html` bindet sie vor `app.js` ein, das Menü zeigt
+  sie ganz unten an. `self.` statt `const`, weil der Wert im Fenster **und** im
+  Service Worker sichtbar sein muss.
+- Alle 13 `state.logs.push(...)` laufen über `logge(text)`, das den
+  Spielverlauf auf 200 Zeilen kappt.
+- Bewusst **nicht** umgesetzt: `crypto.getRandomValues` beim Geben (der
+  Prüfstand braucht ein überschreibbares `Math.random`, um Läufe zu
+  wiederholen), delegierte Zeiger-Listener beim Kartenziehen (Mikro-Optimierung
+  mit echtem Risiko, gehört im Browser mit Maus und Finger geprüft) und die
+  `innerHTML`-Stellen (es gibt weiterhin keine frei wählbaren Namen).
+
+**Geprüft:** Selbstspiel über 60 Runden mit frischem Chrome-Profil, ohne
+Beanstandung. Der Prüfstand kontrolliert jetzt zusätzlich die Kappung des
+Spielverlaufs (genau 200 Zeilen bei Grenze 200) und liest die Versionszeile aus
+dem Menü (meldet `v10`).

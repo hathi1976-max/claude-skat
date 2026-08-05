@@ -1,6 +1,8 @@
-const CACHE = 'skat-v9';
+// Versionsnummer kommt aus version.js – der einzigen Stelle, an der sie steht.
+importScripts('./version.js');
+const CACHE = 'skat-' + self.APP_VERSION;
 const ASSETS = [
-  './', './index.html', './style.css', './app.js',
+  './', './index.html', './style.css', './app.js', './version.js',
   './manifest.webmanifest', './icons/icon.svg'
 ];
 self.addEventListener('install', e => {

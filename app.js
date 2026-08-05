@@ -557,6 +557,15 @@ async function nextRound() {
   document.getElementById('center').querySelector('.result')?.remove();
 }
 
+// Spielverlauf protokollieren. Angezeigt werden nur die letzten 30 Zeilen,
+// aufgehoben die letzten LOG_MAX – sonst wächst die Liste über die gesamte
+// Match-Dauer unbegrenzt.
+const LOG_MAX = 200;
+function logge(text) {
+  state.logs.push(text);
+  if (state.logs.length > LOG_MAX) state.logs.splice(0, state.logs.length - LOG_MAX);
+}
+
 function vorhand() { return (state.dealer + 1) % 3; }
 function mittelhand() { return (state.dealer + 2) % 3; }
 function hinterhand() { return state.dealer; }
@@ -577,7 +586,7 @@ function deal() {
 
 // ---------------- Reizen ----------------
 async function reizen() {
-  state.logs.push(`<b>Spiel ${state.round}</b> – Geber: ${P_NAMES[state.dealer]}`);
+  logge(`<b>Spiel ${state.round}</b> – Geber: ${P_NAMES[state.dealer]}`);
   const VH = vorhand(), MH = mittelhand(), HH = hinterhand();
   const aiMax = {};
   state.players.forEach((pl, i) => { if (!pl.isHuman) aiMax[i] = reizMax(pl.hand); });
@@ -605,12 +614,12 @@ async function reizen() {
         { label: 'Nein – Ramsch', value: 'no', cls: 'danger' }
       ]) === 'yes';
       bubble(willSpielen ? 'Du: 18' : 'Du: Ramsch');
-      state.logs.push(willSpielen ? 'Du spielst für 18' : 'Du willst nicht – Ramsch');
+      logge(willSpielen ? 'Du spielst für 18' : 'Du willst nicht – Ramsch');
       await wait(350);
     } else {
       willSpielen = aiMax[VH] >= 18;
       await aiSay(VH, willSpielen ? '18' : 'Ramsch', willSpielen);
-      state.logs.push(`${P_NAMES[VH]} ${willSpielen ? 'spielt für 18' : 'will nicht – Ramsch'}`);
+      logge(`${P_NAMES[VH]} ${willSpielen ? 'spielt für 18' : 'will nicht – Ramsch'}`);
     }
     if (willSpielen) { declarer = VH; reiz = 18; }
     zeigeHinweis('');
@@ -621,7 +630,7 @@ async function reizen() {
     state.declarer = null;
     state.game = { type: 'ramsch', trump: null, hand: false, ouvert: false, label: 'Ramsch' };
     bubble('Alle passen – Ramsch!');
-    state.logs.push('Alle passen – Ramsch');
+    logge('Alle passen – Ramsch');
     renderAll();
     await wait(900);
     return;
@@ -630,7 +639,7 @@ async function reizen() {
   state.declarer = declarer;
   state.reizwert = reiz;
   bubble(`${P_NAMES[declarer]} ${vb(declarer)} (gereizt bis ${reiz}).`);
-  state.logs.push(`Alleinspieler: ${P_NAMES[declarer]}, Reizwert ${reiz}`);
+  logge(`Alleinspieler: ${P_NAMES[declarer]}, Reizwert ${reiz}`);
   renderAll();
   await wait(900);
 }
@@ -687,8 +696,8 @@ async function askReiz(me, opp, val, role) {
       { label: `${val} sagen`, value: 'yes', cls: 'primary' },
       { label: 'Passe', value: 'no', cls: 'danger' }
     ]);
-    if (a === 'yes') { bubble(`Du: ${val}`); state.logs.push(`Du sagst ${val}`); }
-    else { bubble('Du: Passe'); state.logs.push('Du passt'); }
+    if (a === 'yes') { bubble(`Du: ${val}`); logge(`Du sagst ${val}`); }
+    else { bubble('Du: Passe'); logge('Du passt'); }
     await wait(350);
     return a === 'yes';
   } else {
@@ -697,8 +706,8 @@ async function askReiz(me, opp, val, role) {
       { label: `${val} halten (Ja)`, value: 'yes', cls: 'primary' },
       { label: 'Passe', value: 'no', cls: 'danger' }
     ]);
-    if (a === 'yes') { bubble(`Du hältst ${val}`); state.logs.push(`Du hältst ${val}`); }
-    else { bubble('Du: Passe'); state.logs.push('Du passt'); }
+    if (a === 'yes') { bubble(`Du hältst ${val}`); logge(`Du hältst ${val}`); }
+    else { bubble('Du: Passe'); logge('Du passt'); }
     await wait(350);
     return a === 'yes';
   }
@@ -720,7 +729,7 @@ async function declarerPhase() {
   const handTag = g.hand && !g.ouvert ? ' (Hand)' : '';
   g.label = name + handTag;
   bubble(`${P_NAMES[d]} ${vb(d)} ${name}${handTag}.`);
-  state.logs.push(`Spielansage: ${name}${handTag}`);
+  logge(`Spielansage: ${name}${handTag}`);
   await wait(1100);
 }
 
@@ -1053,7 +1062,7 @@ async function scoreRound() {
   zeigeHinweis('');
   clearActive();
   state.scores[d] += delta;
-  state.logs.push(`${title} ${P_NAMES[d]}: ${delta > 0 ? '+' : ''}${delta}`);
+  logge(`${title} ${P_NAMES[d]}: ${delta > 0 ? '+' : ''}${delta}`);
   const deltas = [0, 0, 0]; deltas[d] = delta;
   state.history.push({ round: state.round, dealer: state.dealer, label: g.label, deltas });
   // In die Statistik gehört nur, was der Alleinspieler selbst geschafft hat –
@@ -1082,7 +1091,7 @@ async function scoreRamsch() {
     state.scores[durchmarschIdx] += -120;
     title = 'Ramsch – Durchmarsch!';
     body = `${P_NAMES[durchmarschIdx]} hat alle Stiche kassiert.<br>${augenLine}<br>${P_NAMES[durchmarschIdx]}: <b>-120</b>`;
-    state.logs.push(`Ramsch – Durchmarsch ${P_NAMES[durchmarschIdx]}: -120`);
+    logge(`Ramsch – Durchmarsch ${P_NAMES[durchmarschIdx]}: -120`);
     recordRamschStat(durchmarschIdx, true);
     [0, 1, 2].filter(i => i !== durchmarschIdx).forEach(i => recordRamschStat(i, false));
   } else {
@@ -1095,7 +1104,7 @@ async function scoreRamsch() {
     const names = losers.map(i => P_NAMES[i]).join(' & ');
     title = 'Ramsch';
     body = `${augenLine}<br>${names}: <b>${penalty}</b>` + (mult > 1 ? ` (×${mult} für Jungfrau)` : '');
-    state.logs.push(`Ramsch – ${names}: ${penalty}${mult > 1 ? ` (×${mult})` : ''}`);
+    logge(`Ramsch – ${names}: ${penalty}${mult > 1 ? ` (×${mult})` : ''}`);
     [0, 1, 2].forEach(i => recordRamschStat(i, losers.includes(i)));
   }
 
@@ -1374,7 +1383,9 @@ function renderMenu() {
     '<h3 style="margin-top:16px">Spielverlauf</h3>' +
     (state ? state.logs.slice(-30).map(l => `<div class="row">${l}</div>`).join('') : '') +
     '<h3 style="margin-top:16px">Neu starten</h3>' +
-    '<div class="row"><button class="btn danger" id="restartBtn">Neues Match (Punkte 0)</button></div>';
+    '<div class="row"><button class="btn danger" id="restartBtn">Neues Match (Punkte 0)</button></div>' +
+    // Sichtbare Version: zeigt sofort, ob der Service Worker noch alten Code ausliefert
+    `<div class="sethint" style="margin-top:16px">Version ${self.APP_VERSION || '?'}</div>`;
 
   box.querySelectorAll('button[data-group]').forEach(b => {
     b.onclick = () => {
