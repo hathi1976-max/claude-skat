@@ -6,4 +6,4 @@
    Vor jedem Push hier hochzählen – sonst serviert der Service Worker alten Code.
    Chrome vergleicht bei der Update-Prüfung auch importierte Skripte, eine
    Änderung an dieser Datei löst die Neuinstallation des Service Workers aus. */
-self.APP_VERSION = 'v10';
+self.APP_VERSION = 'v11';

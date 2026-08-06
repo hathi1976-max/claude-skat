@@ -9,7 +9,17 @@ ohne Abhängigkeiten. Alle Dateien sind statisch auslieferbar.
 claude-skat/
 ├── index.html            Oberfläche: Sitze, Stich, Fußzeile mit Knöpfen, Menü
 ├── style.css             Layout, Kartenoptik, Animationen (responsiv)
-├── app.js                Spielregeln, KI, Ablaufsteuerung und Anzeige
+├── app.js                Einstieg: verdrahtet die Module, startet die Partie
+├── js/
+│   ├── regeln.js         Karten, Trumpfordnung, Bedienzwang, Stich, Spitzen (pur)
+│   ├── zustand.js        Spielzustand, Einstellungen, Statistik, Spielverlauf
+│   ├── takt.js           Pausen und Abbruch der laufenden Runden-Kette
+│   ├── ki.js             Computergegner (Reizen, Drücken, Spielen, Kartenzählen)
+│   ├── wertung.js        Spielwert und Abrechnung (`bewerteSpiel` ist pur)
+│   ├── anzeige.js        DOM: Karten, Sitze, Menü, Eingaben des Menschen
+│   └── ablauf.js         Rundenablauf: Geben, Reizen, Drücken, Stiche
+├── tests/                Testläufer, Regel- und Wertungstests, Selbstspiel-Prüfstand
+├── version.js            einzige Stelle für die Versionsnummer
 ├── sw.js                 Service Worker (Offline-Cache der App-Shell)
 ├── manifest.webmanifest  PWA-Manifest (Android-Installation)
 ├── icons/                App-Icon (SVG)
@@ -67,6 +77,16 @@ py -m http.server 8199 --directory .
 ```
 
 im Projektordner starten, dann `http://localhost:8199` öffnen.
+
+Zwei Prüfstände, beide ohne Installation im Browser:
+
+| Aufruf | Prüft |
+|---|---|
+| `tests/test.html` | Regelkern und Spielwert-Rechnung, 46 Fälle, reine Funktionen |
+| `tests/selbstspiel.html?runden=30&seed=7` | den kompletten Ablauf: spielt die echte `index.html` im iframe durch und meldet jede Ausnahme, jede `console.error` und jede Runde ohne Wertung |
+
+Der Selbstspiel-Prüfstand setzt `Math.random` im iframe auf einen gesäten
+Generator — deshalb bleibt `Math.random` im Spiel selbst stehen (Befund E).
 
 ---
 
@@ -163,3 +183,72 @@ Der Pfad selbst ist später durch `tests/ablauf.test.js` abgedeckt.
 Beanstandung. Der Prüfstand kontrolliert jetzt zusätzlich die Kappung des
 Spielverlaufs (genau 200 Zeilen bei Grenze 200) und liest die Versionszeile aus
 dem Menü (meldet `v10`).
+
+## 06.08.2026 — Aufteilung angeschlossen (D1) und Tests (D2)
+
+### Der Zwischenstand war schlimmer als der Ausgangszustand
+
+Die Aufteilung aus D1 lag als sieben Dateien unter `js/` vor, `app.js` war auf
+43 Zeilen Verdrahtung geschrumpft — aber `index.html` band sie weiterhin als
+klassisches Skript ein (`<script src="app.js">`). Ein Modul mit `import` läuft
+so gar nicht: die App startete nicht. Angeschlossen wurde sie mit
+`<script type="module" src="app.js">`, dazu die sieben Module in die
+`ASSETS`-Liste von `sw.js` und die Version auf `v11`.
+
+### Zwei Fehler, die die Aufteilung hinterlassen hatte
+
+Beim Verschieben von Code zwischen Dateien geht genau das verloren, was vorher
+selbstverständlich im selben Namensraum lag. Gefunden mit einem kleinen
+Abgleich „welcher Bezeichner wird benutzt, ist aber weder importiert noch in
+der Datei definiert":
+
+| Datei | Fehler | Wirkung |
+|---|---|---|
+| `js/wertung.js` | `GRUNDWERT` benutzt, nicht importiert | **jede** Abrechnung außer Null bricht mit `ReferenceError` ab |
+| `js/anzeige.js` | Neustart-Knopf rief `startGame()` statt `neustarten()` | „Neues Match" im Menü wirft `ReferenceError` |
+
+Der zweite ist die Kehrseite der Entkopplung: die Anzeige darf den Ablauf
+bewusst nicht importieren (sonst importieren sich beide gegenseitig), deshalb
+gibt es `setNeustart`. Die Aufrufstelle war beim Verschieben nicht mitgezogen
+worden.
+
+**Gegenprobe zum ersten Fehler:** dieselbe Funktion einmal mit und einmal ohne
+den Import geladen — mit Import ergibt ein gewonnenes Eichel-Spiel mit 2 Spitzen
+den Wert 36, ohne Import bricht sie mit „GRUNDWERT is not defined" ab.
+
+### Tests (D2)
+
+`tests/test.html` mit demselben abhängigkeitsfreien Läufer wie in den
+Schwesterprojekten (`lauf.js`), **46 Fälle**:
+
+| Datei | Fälle | Inhalt |
+|---|---:|---|
+| `regeln.test.js` | 26 | `cardInfo` (Farbspiel, Grand, Ramsch, Null), `legalMoves` (Bedienzwang, Trumpfzwang bei angespieltem Unter), `trickWinner` (Trumpf sticht Farbe, Unter sticht Trumpffarbe, Eichel-Unter höchster, Abwerfen gewinnt nie), `countMatadors` (mit 4, ohne 2, mit 5, Grand), `isMit`, `sortHand` |
+| `wertung.test.js` | 20 | `bewerteSpiel` als Regressionsnetz für B2 (Schneider/Schwarz gegen den Alleinspieler), B3 (Überreizen bei Null), B4 (Grand Ouvert) sowie Überreizen im Farbspiel |
+
+**Beim Schreiben aufgefallen:** Die Gegenproben in `CODEREVIEW.md` nennen
+−96/−120/−528 — das sind die **Punktänderungen**, nicht die Spielwerte (ein
+verlorenes Spiel kostet den doppelten Spielwert). Die ersten beiden Tests waren
+entsprechend falsch angesetzt und schlugen fehl, obwohl der Code stimmte. Sie
+prüfen jetzt beide Größen und benennen den Zusammenhang.
+
+**Gegenprobe der Regressionstests** — jeder Befund testweise wieder eingebaut:
+
+| Wieder eingebaut | Ergebnis | Test erwartet |
+|---|---|---|
+| B2: Schneider/Schwarz gegen den Alleinspieler nicht zählen | Wert 36 statt 48 | 48 → schlägt fehl |
+| B3: Überreiz-Prüfung im Null-Zweig entfernt | Null bei Gebot 24 „gewonnen" | verloren → schlägt fehl |
+| B4: Ansagestufen weglassen (`+3` statt `+5`) | Grand Ouvert 216 statt 264 | 264 → schlägt fehl |
+
+### Nachweis am laufenden Spiel
+
+`tests/selbstspiel.html?runden=30&seed=7`: **30 Runden ohne Beanstandung** —
+keine Ausnahme, keine `console.error`, jede Runde mit Punktveränderung. Die
+Verteilung zeigt, dass wirklich alle Zweige liefen: 8× Eichel-Spiel (Hand),
+5× Schellen (Hand), 3× Grün (Hand), 2× Herz (Hand), 3× Eichel, 2× Schellen,
+1× Grün, 1× Grand, 1× Grand (Hand), 1× Null Ouvert, 3× Ramsch. Spielverlauf bei
+188 Zeilen (Grenze 200 aus Befund E), Menü meldet `v11`. Ohne den
+`GRUNDWERT`-Fehler wäre dieser Lauf in der ersten gewerteten Runde gescheitert.
+
+Zusätzlich von Hand: „Neues Match" im Menü — neu gegeben, 10/10/10 Karten,
+keine Konsolenmeldung.

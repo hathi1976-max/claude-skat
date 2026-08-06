@@ -1,8 +1,12 @@
 // Versionsnummer kommt aus version.js – der einzigen Stelle, an der sie steht.
 importScripts('./version.js');
 const CACHE = 'skat-' + self.APP_VERSION;
+// Neue Module hier eintragen – sonst fehlt offline genau die eine Datei und
+// die App startet nicht.
 const ASSETS = [
   './', './index.html', './style.css', './app.js', './version.js',
+  './js/regeln.js', './js/zustand.js', './js/takt.js', './js/ki.js',
+  './js/wertung.js', './js/anzeige.js', './js/ablauf.js',
   './manifest.webmanifest', './icons/icon.svg'
 ];
 self.addEventListener('install', e => {

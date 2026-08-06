@@ -371,7 +371,27 @@ wird berechnet und nie benutzt. Entfernen.
 
 ## D. Struktur
 
-### D1. `app.js` mit 1.226 Zeilen ohne Modulgrenzen
+### D1. `app.js` mit 1.226 Zeilen ohne Modulgrenzen — ✅ erledigt 06.08.2026
+
+> **Erledigt.** Aus `app.js` (zuletzt 1.444 Zeilen) sind sieben Module unter
+> `js/` geworden — `regeln.js` (109), `zustand.js` (94), `takt.js` (35),
+> `ki.js` (368), `wertung.js` (167), `anzeige.js` (311), `ablauf.js` (410);
+> `app.js` behält 43 Zeilen Verdrahtung. Der Zuschnitt weicht in einem Punkt
+> von der Anweisung ab: `takt.js` (Pausen, Generationszähler, Abbruch) ist
+> eigenständig, weil sowohl der Ablauf als auch die Anzeige wartende Promises
+> anmelden müssen — läge das in `ablauf.js`, importierten sich Anzeige und
+> Ablauf gegenseitig. Aus demselben Grund ruft der Neustart-Knopf eine von
+> außen gesetzte Funktion (`setNeustart`) statt `startGame`.
+>
+> `index.html` bindet `app.js` jetzt als `type="module"`, `sw.js` führt alle
+> sieben Module in `ASSETS`, Version `v11`.
+>
+> **Zwei Fehler, die die Aufteilung hinterlassen hatte** (gefunden mit einem
+> Abgleich „benutzt, aber weder importiert noch lokal definiert"):
+> `js/wertung.js` benutzte `GRUNDWERT` ohne Import — jede Abrechnung außer Null
+> wäre mit `ReferenceError` abgebrochen; `js/anzeige.js` rief im Neustart-Knopf
+> `startGame()` statt `neustarten()`. Beides behoben und gegengeprüft.
+> Details: `ENTWICKLUNG.md`, 06.08.2026.
 
 Regelwerk, KI, Ablaufsteuerung, Rendering und Menü liegen in einer Datei, alles
 im globalen Namensraum.
@@ -389,7 +409,22 @@ im globalen Namensraum.
 Vorher A2 erledigen — der Generationszähler wird sonst über fünf Dateien verteilt
 nachträglich eingezogen.
 
-### D2. Keine Tests, obwohl der Kern perfekt testbar ist
+### D2. Keine Tests, obwohl der Kern perfekt testbar ist — ✅ erledigt 06.08.2026
+
+> **Erledigt.** `tests/test.html` mit abhängigkeitsfreiem Läufer (`lauf.js`,
+> node und npm gibt es auf diesem Rechner nicht), **46 Fälle**:
+> `regeln.test.js` (26) über `cardInfo`, `legalMoves`, `trickWinner`,
+> `countMatadors`, `isMit`, `sortHand` — alle in der Anweisung genannten Fälle
+> sind dabei; `wertung.test.js` (20) über `bewerteSpiel` als Regressionsnetz
+> für B2, B3 und B4.
+>
+> **Gegenprobe:** jeder der drei Befunde testweise wieder eingebaut — B2 ergibt
+> dann Wert 36 statt 48, B3 wertet das überreizte Null als gewonnen, B4 rechnet
+> 216 statt 264. Alle drei Tests schlagen fehl.
+>
+> **Beim Schreiben gefunden:** Die Zahlen der Gegenproben in diesem Dokument
+> (−96/−120/−528) sind **Punktänderungen**, nicht Spielwerte — ein verlorenes
+> Spiel kostet den doppelten Spielwert. Die Tests prüfen jetzt beide Größen.
 
 `cardInfo`, `legalMoves`, `trickWinner`, `countMatadors`, `scoreRound` sind reine
 Funktionen über einfachen Datenstrukturen.
@@ -477,5 +512,9 @@ Node-Skript, das beide aus `package.json` generiert.
 3. **B2/B3/B4** (Wertung) mit Tests aus D2 abgesichert
 4. **B1 + C2** (Ouvert vollständig)
 5. **D3** (Versions-Disziplin)
-6. **D1/D2** (Aufteilung + Tests)
-7. Rest nach Gelegenheit
+6. **D1/D2** (Aufteilung + Tests) ✅ 06.08.2026 — sieben Module unter `js/`,
+   46 Tests, zwei Fehler aus der Aufteilung dabei gefunden und behoben
+7. Rest nach Gelegenheit — **E** ist abgearbeitet, drei Punkte bewusst offen
+   (Begründung jeweils dort)
+
+**Alle Befunde des Reviews sind umgesetzt oder mit Begründung offengelassen.**
