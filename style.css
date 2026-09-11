@@ -14,15 +14,18 @@ body{
 }
 #app{display:flex;flex-direction:column;height:100dvh}
 
-/* Kopfzeile */
+/* Kopfzeile: Zeile 1 Logo+Spielart+Menü, Zeile 2 die Spieler-Chips für sich -
+   sonst schiebt die Spielart die Spielerpunkte zu eng nach rechts. */
 #topbar{
-  display:flex;align-items:center;gap:12px;padding:8px 14px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 14px;
   background:rgba(0,0,0,.22);border-bottom:1px solid var(--line);
   padding-top:calc(8px + env(safe-area-inset-top));
 }
-.brand{font-weight:800;letter-spacing:.5px;font-size:18px}
+.brand{font-weight:800;letter-spacing:.5px;font-size:18px;order:1}
 .brand .sub{font-weight:500;font-size:12px;opacity:.7;margin-left:6px}
-#scoreboard{margin-left:auto;display:flex;gap:6px;font-size:12px}
+#gameType{order:2}
+#menuBtn{order:3;margin-left:auto}
+#scoreboard{order:4;flex-basis:100%;display:flex;justify-content:flex-end;gap:6px;font-size:12px}
 .scorechip{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:20px;padding:4px 10px;white-space:nowrap}
 .scorechip b{color:var(--gold)}
 .scorechip.decl{outline:2px solid var(--gold)}
