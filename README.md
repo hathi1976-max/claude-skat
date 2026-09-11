@@ -26,8 +26,13 @@ wirklich läuft, verrät die Versionszeile im Menü.
 ## Was ist umgesetzt
 - **Reizen** zwischen Vorhand / Mittelhand / Hinterhand mit klickbaren Geboten;
   KI-gegen-KI-Auktionen laufen sichtbar ab (jede Zahl und jedes Ja/Passe wird angezeigt).
-- **Skat aufnehmen** und **2 Karten drücken**, oder **Handspiel**.
+- **Skat aufnehmen** und **2 Karten drücken**, oder **Handspiel**. Nach dem Drücken
+  lässt sich noch einmal umdrücken (Karten zurück auf die Hand, neu wählen) –
+  solange die Spielart noch nicht angesagt ist, ist nichts endgültig.
 - **Spielarten:** Farbspiel (Eichel/Grün/Herz/Schellen), **Grand**, **Null / Null Ouvert**.
+  Die angesagte Spielart steht während der ganzen Runde oben in der Kopfzeile.
+- **Null / Null Ouvert** wird sofort abgebrochen, sobald der Alleinspieler einen
+  eigenen Stich macht – das Spiel ist dann schon verloren, weiterspielen ändert nichts.
 - **Handspiel** (ohne Skataufnahme, +1 Stufe) und **Grand Ouvert** – sowohl die KI
   als auch du selbst können beides ansagen. Grand Ouvert wählst du im „Hand spielen"-
   Dialog unter Grand; es erfordert alle Stiche. Die KI legt beim Grand Ouvert ihre

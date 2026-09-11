@@ -48,6 +48,15 @@ function renderAll() {
   renderTrick();
   renderSeatInfo();
   renderScore();
+  renderGameType();
+}
+
+// Zeigt die angesagte Spielart durchgehend an, nicht nur kurz in der Bubble
+function renderGameType() {
+  const el = document.getElementById('gameType');
+  if (!state.game || !state.game.label) { el.classList.add('hidden'); return; }
+  el.textContent = state.game.label;
+  el.classList.remove('hidden');
 }
 
 function renderMyHand(game, decorate) {

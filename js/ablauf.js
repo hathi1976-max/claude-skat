@@ -218,12 +218,12 @@ async function declarerPhase() {
   }
   // Trumpf markieren + Hand neu sortieren
   sortHand(state.players[0].hand, state.game);
-  renderAll();
   const g = state.game;
   const name = g.type === 'suit' ? SUIT_NAME[g.trump] + '-Spiel'
     : g.type === 'grand' ? ('Grand' + (g.ouvert ? ' Ouvert' : '')) : ('Null' + (g.ouvert ? ' Ouvert' : ''));
   const handTag = g.hand && !g.ouvert ? ' (Hand)' : '';
   g.label = name + handTag;
+  renderAll();
   bubble(`${P_NAMES[d]} ${vb(d)} ${name}${handTag}.`);
   logge(`Spielansage: ${name}${handTag}`);
   await wait(1100);
@@ -282,12 +282,24 @@ async function humanDeclare() {
     sortHand(pl.hand, null);
     renderAll();
     bubble('Skat aufgenommen – bitte 2 Karten drücken.');
-    // Drücken: 2 Karten wählen
-    const drueck = await humanDiscard();
-    const ids = new Set(drueck.map(cardId));
-    state.skat = twelve.filter(c => ids.has(cardId(c)));
-    pl.hand = twelve.filter(c => !ids.has(cardId(c)));
-    renderMyHand(null);
+    // Drücken, mit Gelegenheit zum Umentscheiden - vor der Spielansage ist nichts endgültig
+    while (true) {
+      const drueck = await humanDiscard();
+      const ids = new Set(drueck.map(cardId));
+      state.skat = twelve.filter(c => ids.has(cardId(c)));
+      pl.hand = twelve.filter(c => !ids.has(cardId(c)));
+      renderMyHand(null);
+      zeigeHinweis('Gedrückt. Weiter zur Spielansage, oder nochmal drücken?');
+      const weiter = await askAction([
+        { label: 'Weiter', value: 'go', cls: 'primary' },
+        { label: 'Nochmal drücken', value: 'redo', cls: 'ghostbtn' }
+      ]);
+      if (weiter === 'go') break;
+      pl.hand = twelve.slice();
+      sortHand(pl.hand, null);
+      state.skat = [];
+      renderMyHand(null);
+    }
   } else {
     isHand = true;
     twelve = pl.hand.concat(state.skat); // Skat zählt trotzdem für Spitzen/Punkte
@@ -400,10 +412,13 @@ async function playTricks() {
     state.players[w].tricks++;
     state.players[w].won.push(...state.trick.map(t => t.card));
     state.leader = w;
-    bubble(`Stich für ${P_NAMES[w]}`);
+    // Null ist mit dem ersten eigenen Stich verloren - weiterspielen ändert daran nichts
+    const nullVerloren = state.game.type === 'null' && w === state.declarer;
+    bubble(`Stich für ${P_NAMES[w]}` + (nullVerloren ? ' – Null verloren!' : ''));
     renderAll();
     await wait(900);
     clearTrick();
+    if (nullVerloren) break;
   }
 }
 
