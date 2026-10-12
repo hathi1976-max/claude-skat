@@ -84,6 +84,7 @@ function attachDragReorder(c, el, hand, rerender) {
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
   });
   el.addEventListener('pointermove', e => {
+    if (!boxRect || !elRect) return; // Move ohne vorheriges Down auf dieser Karte (z.B. Browser-Eigenheit) - nichts zu tun
     let dx = e.clientX - sx, dy = e.clientY - sy;
     if (!dragging && Math.hypot(dx, dy) > 6) { dragging = true; el.classList.add('dragging'); }
     if (dragging) {

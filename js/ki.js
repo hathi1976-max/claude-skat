@@ -66,7 +66,11 @@ function reizMax(hand) {
   const cands = SUITS.map(s => evalSuit(hand, s)).concat([evalGrand(hand)]);
   let best = 0;
   for (const c of cands) {
-    const ok = A === 'vorsichtig' ? c.strong : A === 'mutig' ? c.nearWin : c.winnable;
+    let ok = A === 'vorsichtig' ? c.strong : A === 'mutig' ? c.nearWin : c.winnable;
+    // Selbstspiel-Messung (29.09.2026, 560 KI-Runden): Reizwert 25-36 verliert
+    // auffällig oft (54,7 % statt 39,8 % bei 18-24 bzw. 45,8 % bei 37-50) - dort
+    // reicht "winnable"/"nearWin" nicht, erst eine wirklich starke Hand mitgehen lassen.
+    if (ok && !c.strong && c.value >= 25 && c.value <= 36) ok = false;
     if (ok) best = Math.max(best, c.value);
   }
   if (best === 0) return 0;
